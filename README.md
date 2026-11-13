@@ -70,4 +70,43 @@ export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-25.0.5.8-hotspot"
 cd desktop && npm run dev
 ```
 
+### External API addresses
+
+The backend reads the base URLs of the external APIs from Spring properties. The defaults are the real APIs; tests point them at a fake server (WireMock) through environment variables, which the desktop app passes on to the backend:
+
+| Property | Environment variable | Default |
+| --- | --- | --- |
+| `dockline.github.api-url` | `DOCKLINE_GITHUB_API_URL` | `https://api.github.com` |
+| `dockline.github.oauth-url` | `DOCKLINE_GITHUB_OAUTH_URL` | `https://github.com` |
+| `dockline.hostinger.api-url` | `DOCKLINE_HOSTINGER_API_URL` | `https://developers.hostinger.com` |
+
 The renderer talks to the main process only through the small `window.dockline` API in `desktop/src/preload/index.ts` (no Node integration in the window). The bundled Java runtime comes in a later task.
+
+## End-to-end tests
+
+The end-to-end tests live in `desktop/e2e/`. [Playwright](https://playwright.dev) starts the **real** built Electron app, which starts the **real** backend jar, and checks what the user sees. They sit inside `desktop/` because they need its Electron binary and its built app (`out/`), so there is only one `package.json` to install.
+
+Fake external APIs: `e2e/support/wiremock.ts` starts a [WireMock](https://wiremock.org) server (the standalone jar from the `wiremock` npm package, run with the same Java; no Docker needed) on a free port, with helpers to add stubs and read the requests it got. In a test, ask for the `wiremock` fixture and pass `wiremock.url` to the app with `launchApp({ DOCKLINE_GITHUB_API_URL: wiremock.url })`. By default every external API points at a closed local port, so a test can never reach the real GitHub or Hostinger.
+
+Run them locally (Git Bash):
+
+```bash
+export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-25.0.5.8-hotspot"   # Java 25, used by the backend and WireMock
+(cd backend && ./mvnw -DskipTests package)    # build the backend jar first (or ./mvnw verify)
+cd desktop
+npm install
+npm run test:e2e                              # builds the app, then runs Playwright
+npx playwright test e2e/app-start.spec.ts     # one file only (after a build)
+```
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`:
+
+| Job | Runner | What |
+| --- | --- | --- |
+| Backend build + tests | Linux | `./mvnw verify`; fails if the committed `openapi.json` is out of date |
+| Desktop typecheck, build + unit tests | Linux | `npm run build`, `npm test`; fails if `schema.d.ts` does not match `openapi.json` |
+| End-to-end tests | Windows | builds the jar and runs `npm run test:e2e` (Dockline is a Windows app) |
+
+No secrets or real tokens are used; external APIs are only ever faked.
