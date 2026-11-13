@@ -8,6 +8,7 @@ import { Placeholder } from '@/pages/Placeholder'
 import { ReposPage } from '@/pages/ReposPage'
 import { DomainsPage } from '@/pages/DomainsPage'
 import { SitesPage } from '@/pages/SitesPage'
+import { SiteDetailPage } from '@/pages/SiteDetailPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { Connections } from '@/components/Connections'
 
@@ -54,6 +55,8 @@ export function App({ footer, baseUrl }: { footer?: ReactNode; baseUrl?: string 
           {routes.map(({ path, page }) => (
             <Route key={path} path={path} element={pageElement(path, page, baseUrl)} />
           ))}
+          {/* Not in `routes`, so it gets no sidebar entry; "Sites" stays highlighted because its link matches by prefix. */}
+          {baseUrl && <Route path="/sites/:domain" element={<SiteDetailPage baseUrl={baseUrl} />} />}
           <Route path="*" element={<Navigate to={routes[0].path} replace />} />
         </Routes>
       </main>
