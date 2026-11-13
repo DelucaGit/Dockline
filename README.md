@@ -105,6 +105,12 @@ Each entry: `id`, `time` (ISO-8601, UTC), `level`, `source`, `action`, `statusCo
 
 The renderer talks to the main process only through the small `window.dockline` API in `desktop/src/preload/index.ts` (no Node integration in the window). The bundled Java runtime comes in a later task.
 
+### Tokens and connection status
+
+GitHub and Hostinger tokens are kept in **Windows Credential Manager** (service name `Dockline`, one entry per source), so they survive restarts and never end up in files, logs or API responses; every stored token is also registered with `SecretMasker`. Backend code uses the `TokenStore` interface (`save` / `read` / `delete` per source). `dockline.token-store` (or `DOCKLINE_TOKEN_STORE`) chooses the store: `credential-manager` (default) or `memory` (forgotten on exit). Backend tests and end-to-end tests always use `memory`. If Credential Manager cannot be opened, the app still starts and reports an error in the Log section.
+
+`GET /api/status` returns `{"sources":[{"source":"GITHUB","state":"NOT_CONNECTED","message":null}, ...]}` with one entry per source; `state` is `CONNECTED`, `LIMITED`, `ERROR` or `NOT_CONNECTED`. For now a stored token means `CONNECTED`; a `SourceStatusProvider` bean can work out the real state of a source.
+
 ## End-to-end tests
 
 The end-to-end tests live in `desktop/e2e/`. [Playwright](https://playwright.dev) starts the **real** built Electron app, which starts the **real** backend jar, and checks what the user sees. They sit inside `desktop/` because they need its Electron binary and its built app (`out/`), so there is only one `package.json` to install.
