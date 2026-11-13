@@ -1,4 +1,4 @@
-# HubHub
+# Dockline
 
 A Windows desktop app that brings GitHub and Hostinger together in one window.
 
