@@ -9,6 +9,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.http.Fault;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import java.util.List;
 
 /**
@@ -113,6 +114,22 @@ public final class HostingerStubs {
         hostinger.stubFor(get(urlPathEqualTo(WEBSITES_PATH)).willReturn(error(429, """
                 {"message":"Too Many Attempts.","correlation_id":"c0ffee00-0000-4000-8000-000000000012"}""")
                 .withHeader("Retry-After", Integer.toString(retryAfterSeconds))));
+    }
+
+    /**
+     * The website list answers 429 once (with {@code retryAfter} as the Retry-After header, or none when null),
+     * then the earlier/other website stubs answer again: Hostinger saying "slow down" and then recovering.
+     * Uses a WireMock scenario; {@code resetAll()} starts it over.
+     */
+    public static void websitesRateLimitedOnce(WireMockServer hostinger, String retryAfter) {
+        var answer = error(429, """
+                {"message":"Too Many Attempts.","correlation_id":"c0ffee00-0000-4000-8000-000000000014"}""");
+        if (retryAfter != null) {
+            answer = answer.withHeader("Retry-After", retryAfter);
+        }
+        hostinger.stubFor(get(urlPathEqualTo(WEBSITES_PATH)).atPriority(1)
+                .inScenario("websites-rate-limited-once").whenScenarioStateIs(Scenario.STARTED)
+                .willSetStateTo("recovered").willReturn(answer));
     }
 
     public static void websitesServerError(WireMockServer hostinger) {

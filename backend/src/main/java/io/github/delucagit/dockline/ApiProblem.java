@@ -7,7 +7,8 @@ import org.springframework.http.ProblemDetail;
 /**
  * Thrown by a data endpoint when it cannot answer; turned into an {@code application/problem+json} response
  * with a stable machine-readable {@code code} property (e.g. {@code GITHUB_NOT_CONNECTED}) that the UI can
- * switch on, a readable {@code detail} for the user and, for rate limits, a {@code Retry-After} header.
+ * switch on, a readable {@code detail} for the user and, for rate limits, a {@code Retry-After} header
+ * plus the same number of seconds as a {@code retryAfterSeconds} property.
  * The detail is shown to the user as-is, so it must never contain a token.
  */
 public class ApiProblem extends RuntimeException {
@@ -46,6 +47,10 @@ public class ApiProblem extends RuntimeException {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, getMessage());
         problem.setTitle(title);
         problem.setProperty("code", code);
+        if (retryAfter != null && retryAfter.matches("\\d{1,9}")) {
+            // The same wait as the Retry-After header, as a number the UI can count down from.
+            problem.setProperty("retryAfterSeconds", Long.parseLong(retryAfter));
+        }
         return problem;
     }
 }

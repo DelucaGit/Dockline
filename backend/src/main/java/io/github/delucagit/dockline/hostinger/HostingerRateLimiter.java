@@ -14,6 +14,11 @@ import org.springframework.web.client.RestClientException;
  * {@link #WINDOW}, counted across every feature (Hostinger allows about 90 a minute and can block the IP address
  * after repeated violations). A request over the cap waits until the oldest one in the window is a minute old,
  * instead of failing; after {@link #MAX_WAIT} of waiting it gives up with {@link CapReachedException}.
+ *
+ * <p>It also keeps Hostinger's own "slow down": after a 429 answer, {@link #blockFor} stops every Hostinger request
+ * (from any feature or thread) until the Retry-After time has passed. A request that may wait
+ * ({@link #acquire(Duration)}) waits out a short block; a longer one fails at once with
+ * {@link HostingerRateLimitedException}, so no HTTP request to Dockline hangs for minutes.
  * Time comes from the {@link Clock} and waiting goes through the {@link Waiter}, so tests drive both. Thread-safe.
  */
 @Component
@@ -29,15 +34,30 @@ class HostingerRateLimiter {
     /** When the requests in the current window were let through, oldest first. Guarded by this. */
     private final Deque<Instant> sent = new ArrayDeque<>();
 
+    /** No Hostinger request before this (Hostinger's Retry-After after a 429); EPOCH when never blocked. Guarded by this. */
+    private Instant blockedUntil = Instant.EPOCH;
+
     HostingerRateLimiter(Clock clock, Waiter waiter) {
         this.clock = clock;
         this.waiter = waiter;
     }
 
-    /** Takes a slot for one request to Hostinger, waiting for one to free up if all are taken. */
-    void acquire() {
+    /**
+     * Takes a slot for one request to Hostinger, waiting for one to free up if all are taken. While Hostinger's
+     * Retry-After block is in effect it first waits for the block to end, if that is at most {@code maxBlockedWait};
+     * otherwise it throws {@link HostingerRateLimitedException} with the time left.
+     */
+    void acquire(Duration maxBlockedWait) {
         Duration waited = Duration.ZERO;
         while (true) {
+            Duration blocked = blockedFor();
+            if (blocked.isPositive()) {
+                if (blocked.compareTo(maxBlockedWait) > 0 || Thread.currentThread().isInterrupted()) {
+                    throw new HostingerRateLimitedException(blocked);
+                }
+                waiter.waitFor(blocked);
+                continue;
+            }
             Duration wait = tryAcquire();
             if (wait.isZero()) {
                 return;
@@ -49,6 +69,20 @@ class HostingerRateLimiter {
             waiter.waitFor(step);
             waited = waited.plus(step);
         }
+    }
+
+    /** Blocks every Hostinger request for {@code wait} from now (never shortens a block already in effect). */
+    synchronized void blockFor(Duration wait) {
+        Instant until = clock.instant().plus(wait);
+        if (until.isAfter(blockedUntil)) {
+            blockedUntil = until;
+        }
+    }
+
+    /** How long Hostinger's Retry-After block still lasts; zero when there is none. */
+    synchronized Duration blockedFor() {
+        Duration left = Duration.between(clock.instant(), blockedUntil);
+        return left.isNegative() ? Duration.ZERO : left;
     }
 
     /** Zero when a slot was taken; otherwise how long until the oldest request leaves the window. */

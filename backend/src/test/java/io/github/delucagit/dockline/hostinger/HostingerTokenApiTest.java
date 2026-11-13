@@ -217,7 +217,8 @@ class HostingerTokenApiTest {
         tokenStore.save(Source.HOSTINGER, TOKEN);
 
         HostingerStubs.rateLimited(HOSTINGER);
-        assertThat(hostinger()).startsWith("LIMITED: Hostinger's rate limit");
+        assertThat(hostinger()).startsWith("LIMITED: Hostinger asked us to slow down");
+        clock.advanceSeconds(30); // Hostinger's Retry-After: 30 is over
 
         HostingerStubs.connectionReset(HOSTINGER);
         assertThat(recheck()).startsWith("LIMITED: Could not reach Hostinger");

@@ -110,7 +110,14 @@ class HostingerController {
         SecretMasker.register(token);
         HostingerClient.Reply reply;
         try {
-            reply = client.getSubscriptions(token);
+            reply = client.getSubscriptions(token, true);
+        } catch (HostingerRateLimitedException e) {
+            HostingerTokenException limited = new HostingerTokenException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Hostinger's rate limit is reached (it asked Dockline to slow down), so the token could not be "
+                            + "checked and was not saved. "
+                            + "Try again in " + e.retryAfterSeconds() + " s.");
+            limited.retryAfter = Long.toString(e.retryAfterSeconds());
+            throw limited;
         } catch (RestClientException e) {
             throw new HostingerTokenException(HttpStatus.BAD_GATEWAY,
                     "Could not reach Hostinger, so the token was not saved. Check your internet connection and try again.");
@@ -119,13 +126,6 @@ class HostingerController {
             throw new HostingerTokenException(HttpStatus.UNPROCESSABLE_CONTENT,
                     "Hostinger rejected this token (HTTP " + reply.status() + "), so it was not saved. Check that you "
                             + "copied the whole token from hPanel and that it has not expired or been deleted.");
-        }
-        if (reply.status() == 429) {
-            HostingerTokenException limited = new HostingerTokenException(HttpStatus.TOO_MANY_REQUESTS,
-                    "Hostinger's rate limit is reached, so the token could not be checked and was not saved. "
-                            + "Try again in a minute.");
-            limited.retryAfter = reply.headers().getFirst(HttpHeaders.RETRY_AFTER);
-            throw limited;
         }
         if (!reply.ok()) {
             throw new HostingerTokenException(HttpStatus.BAD_GATEWAY, "Could not reach Hostinger (it answered HTTP "
@@ -161,6 +161,7 @@ class HostingerController {
         ResponseEntity.BodyBuilder response = ResponseEntity.status(e.status);
         if (e.retryAfter != null) {
             response.header(HttpHeaders.RETRY_AFTER, e.retryAfter);
+            problem.setProperty("retryAfterSeconds", Long.parseLong(e.retryAfter));
         }
         return response.body(problem);
     }

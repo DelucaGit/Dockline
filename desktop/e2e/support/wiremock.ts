@@ -14,6 +14,12 @@ export interface StubMapping {
     headers?: Record<string, string>
     [k: string]: unknown
   }
+  /** 1 is the highest; a stub with a higher priority is tried first. */
+  priority?: number
+  /** WireMock scenario: the stub only matches in `requiredScenarioState` and then moves to `newScenarioState`. */
+  scenarioName?: string
+  requiredScenarioState?: string
+  newScenarioState?: string
 }
 
 /** A running fake HTTP server (WireMock standalone), e.g. a fake GitHub or Hostinger API. */
