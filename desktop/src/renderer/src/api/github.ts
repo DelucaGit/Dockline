@@ -51,3 +51,8 @@ export async function pollGithubConnect(baseUrl: string): Promise<GithubConnectP
 export async function disconnectGithub(baseUrl: string): Promise<void> {
   await post(baseUrl, '/api/github/disconnect')
 }
+
+/** Ask GitHub about the saved token right now (the backend otherwise caches the answer for a minute). */
+export async function recheckGithub(baseUrl: string): Promise<void> {
+  await post(baseUrl, '/api/github/recheck')
+}

@@ -32,11 +32,13 @@ export const strings = {
     heading: 'Connections',
     github: 'GitHub',
     hostinger: 'Hostinger',
+    reconnect: 'Reconnect',
+    reconnectLabel: 'Reconnect GitHub',
     // Appended to the source name for screen readers and tooltips, e.g. "GitHub: connected".
     state: {
       CONNECTED: 'connected',
       LIMITED: 'limited',
-      ERROR: 'error',
+      ERROR: 'error — reconnect needed',
       NOT_CONNECTED: 'not connected',
       UNKNOWN: 'unknown'
     }

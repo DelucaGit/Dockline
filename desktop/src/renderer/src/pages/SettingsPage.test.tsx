@@ -42,6 +42,7 @@ function fakeBackend(initial: { state: ConnectionState; message?: string | null 
         }
         return json(next)
       }
+      if (path === '/api/github/recheck') return json({ source: 'GITHUB', state: github.state })
       if (path === '/api/github/disconnect') {
         github.state = 'NOT_CONNECTED'
         github.message = null
@@ -64,7 +65,9 @@ function renderSettings() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <SettingsPage baseUrl={BASE_URL} />
+      <MemoryRouter>
+        <SettingsPage baseUrl={BASE_URL} />
+      </MemoryRouter>
     </QueryClientProvider>
   )
 }
@@ -196,7 +199,7 @@ describe('Sidebar connection dots', () => {
   it.each([
     ['CONNECTED', 'GitHub: connected', 'bg-green-500'],
     ['LIMITED', 'GitHub: limited', 'bg-yellow-500'],
-    ['ERROR', 'GitHub: error', 'bg-red-500'],
+    ['ERROR', 'GitHub: error — reconnect needed', 'bg-red-500'],
     ['NOT_CONNECTED', 'GitHub: not connected', 'bg-red-500']
   ] as const)('GitHub %s is announced as "%s"', async (state, name, colour) => {
     fakeBackend({ state })
@@ -215,5 +218,34 @@ describe('Sidebar connection dots', () => {
 
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument())
+  })
+
+  it.each(['CONNECTED', 'LIMITED', 'NOT_CONNECTED'] as const)('offers no sidebar "Reconnect" when GitHub is %s', async (state) => {
+    fakeBackend({ state })
+    renderApp()
+    await waitFor(() => expect(screen.getByTestId('connection-github')).toHaveAttribute('data-state', state))
+    expect(screen.queryByRole('button', { name: 'Reconnect GitHub' })).not.toBeInTheDocument()
+  })
+
+  it('"Reconnect" next to a red GitHub dot opens Settings and starts the device flow at once', async () => {
+    const user = userEvent.setup()
+    const backend = fakeBackend({ state: 'ERROR', message: 'GitHub no longer accepts the token. Please reconnect.' })
+    backend.pollsReturn({ state: 'PENDING', intervalSeconds: 1 })
+    renderApp()
+
+    await user.click(await screen.findByRole('button', { name: 'Reconnect GitHub' }))
+
+    expect(await screen.findByText('WDJB-MJHT')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(backend.calls.filter((c) => c === 'POST /api/github/connect')).toHaveLength(1)
+    expect(backend.openExternal).toHaveBeenCalledWith('https://github.com/login/device')
+  })
+
+  it('opening Settings rechecks the token right away', async () => {
+    const user = userEvent.setup()
+    const backend = fakeBackend({ state: 'CONNECTED' })
+    renderApp()
+    await user.click(await screen.findByRole('link', { name: 'GitHub: connected' }))
+    await waitFor(() => expect(backend.calls).toContain('POST /api/github/recheck'))
   })
 })
