@@ -15,7 +15,8 @@ function fakeDockline(states: BackendState[], retryResult?: BackendState) {
   let i = 0
   const api: DocklineApi = {
     getBackendState: vi.fn(async () => states[Math.min(i++, states.length - 1)]),
-    retryBackend: vi.fn(async () => retryResult ?? { status: 'starting' as const })
+    retryBackend: vi.fn(async () => retryResult ?? { status: 'starting' as const }),
+    openExternal: vi.fn(async () => {})
   }
   window.dockline = api
   return api

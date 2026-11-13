@@ -11,9 +11,12 @@ export interface DocklineApi {
   getBackendState(): Promise<BackendState>
   /** Try to start the backend again after a failure. */
   retryBackend(): Promise<BackendState>
+  /** Open an https address in the user's default browser. Rejects anything that is not https. */
+  openExternal(url: string): Promise<void>
 }
 
 export const IPC = {
   getBackendState: 'backend:get-state',
-  retryBackend: 'backend:retry'
+  retryBackend: 'backend:retry',
+  openExternal: 'app:open-external'
 } as const

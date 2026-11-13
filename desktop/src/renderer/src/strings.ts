@@ -28,6 +28,53 @@ export const strings = {
     log: { title: 'Log', empty: 'Nothing here yet.' },
     settings: { title: 'Settings', empty: 'Nothing here yet.' }
   },
+  connections: {
+    heading: 'Connections',
+    github: 'GitHub',
+    hostinger: 'Hostinger',
+    // Appended to the source name for screen readers and tooltips, e.g. "GitHub: connected".
+    state: {
+      CONNECTED: 'connected',
+      LIMITED: 'limited',
+      ERROR: 'error',
+      NOT_CONNECTED: 'not connected',
+      UNKNOWN: 'unknown'
+    }
+  },
+  settings: {
+    title: 'Settings',
+    github: {
+      heading: 'GitHub',
+      connect: 'Connect to GitHub',
+      reconnect: 'Reconnect',
+      tryAgain: 'Try again',
+      starting: 'Starting…',
+      connected: 'Connected',
+      limited: 'Connected, with limits',
+      error: 'Connection problem',
+      notConnected: 'Not connected',
+      notConnectedHint: 'Connect your GitHub account to see your repositories.',
+      statusLoadError: 'The connection status could not be loaded.',
+      codeLabel: 'Your code',
+      codeInstructions: 'Enter this code on GitHub to approve Dockline:',
+      addressLabel: 'Open this address if your browser did not open:',
+      waiting: 'Waiting for approval…',
+      copyCode: 'Copy code',
+      codeCopied: 'Copied',
+      copyFailed: 'Copy failed',
+      cancel: 'Cancel',
+      disconnect: 'Disconnect',
+      disconnecting: 'Disconnecting…',
+      confirmTitle: 'Disconnect from GitHub?',
+      confirmText: 'Dockline forgets the saved GitHub token. You can connect again at any time.',
+      confirmYes: 'Yes, disconnect',
+      confirmNo: 'Keep connected',
+      disconnectError: 'Disconnecting did not work. Please try again.',
+      startError: 'The connection could not be started. Please try again.',
+      pollError: 'The connection could not be checked. Please try again.',
+      setupPointer: 'See docs/github-oauth-app-setup.md for how to set this up.'
+    }
+  },
   log: {
     title: 'Log',
     empty: 'No errors',

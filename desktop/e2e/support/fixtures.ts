@@ -15,7 +15,9 @@ const NO_REAL_APIS = {
   DOCKLINE_GITHUB_API_URL: 'http://127.0.0.1:9',
   DOCKLINE_GITHUB_OAUTH_URL: 'http://127.0.0.1:9',
   DOCKLINE_HOSTINGER_API_URL: 'http://127.0.0.1:9',
-  DOCKLINE_TOKEN_STORE: 'memory'
+  DOCKLINE_TOKEN_STORE: 'memory',
+  // The app records the addresses it would open in a browser instead of opening one.
+  DOCKLINE_E2E_NO_BROWSER: '1'
 }
 
 export interface RunningApp {
