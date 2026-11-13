@@ -12,7 +12,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "generate:api": "openapi-typescript ../backend/openapi.json -o src/renderer/src/api/schema.d.ts"
+    "generate:api": "openapi-typescript ../backend/openapi.json -o src/renderer/src/api/schema.d.ts",
+    "test:e2e": "electron-vite build && playwright test"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.5.0",
@@ -26,6 +27,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/vite": "^4.3.5",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
@@ -41,6 +43,7 @@
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "wiremock": "^3.13.2"
   }
 }
