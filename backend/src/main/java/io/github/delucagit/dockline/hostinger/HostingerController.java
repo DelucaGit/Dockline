@@ -16,6 +16,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,7 +32,7 @@ import org.springframework.web.client.RestClientException;
  */
 @RestController
 @RequestMapping("/api/hostinger")
-@Tag(name = "Hostinger", description = "Save (after checking), check and remove the Hostinger API token")
+@Tag(name = "Hostinger", description = "Save (after checking), check and remove the Hostinger API token; list websites")
 class HostingerController {
 
     /** Hostinger tokens are far shorter; anything longer is not a token. */
@@ -40,11 +41,34 @@ class HostingerController {
     private final HostingerClient client;
     private final HostingerStatusProvider status;
     private final TokenStore tokenStore;
+    private final HostingerSiteList siteList;
 
-    HostingerController(HostingerClient client, HostingerStatusProvider status, TokenStore tokenStore) {
+    HostingerController(HostingerClient client, HostingerStatusProvider status, TokenStore tokenStore,
+            HostingerSiteList siteList) {
         this.client = client;
         this.status = status;
         this.tokenStore = tokenStore;
+        this.siteList = siteList;
+    }
+
+    @GetMapping(path = "/sites", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(operationId = "listHostingerSites", summary = "The user's Hostinger websites, fetched from Hostinger now",
+            description = "Follows all pages of Hostinger's website list. Errors are problem responses with a stable "
+                    + "`code` property: HOSTINGER_NOT_CONNECTED (409), HOSTINGER_TOKEN_REJECTED (409, replace the "
+                    + "token), HOSTINGER_RATE_LIMITED (429, Retry-After header when Hostinger sends one) and "
+                    + "HOSTINGER_UNAVAILABLE (502). Hostinger failures are written to the Log section and update "
+                    + "HOSTINGER in GET /api/status at once.")
+    @ApiResponse(responseCode = "200", description = "All websites, sorted by domain")
+    @ApiResponse(responseCode = "409", description = "code HOSTINGER_NOT_CONNECTED: no Hostinger token saved; "
+            + "code HOSTINGER_TOKEN_REJECTED: Hostinger rejected the saved token (revoked or expired), replace it",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "429", description = "code HOSTINGER_RATE_LIMITED: Hostinger's rate limit is reached",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "502", description = "code HOSTINGER_UNAVAILABLE: Hostinger could not be reached, "
+            + "timed out, failed or answered unexpectedly",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    HostingerApi.Sites sites() {
+        return siteList.list();
     }
 
     /** The token the user pasted. */

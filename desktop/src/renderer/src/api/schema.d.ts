@@ -163,6 +163,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hostinger/sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The user's Hostinger websites, fetched from Hostinger now
+         * @description Follows all pages of Hostinger's website list. Errors are problem responses with a stable `code` property: HOSTINGER_NOT_CONNECTED (409), HOSTINGER_TOKEN_REJECTED (409, replace the token), HOSTINGER_RATE_LIMITED (429, Retry-After header when Hostinger sends one) and HOSTINGER_UNAVAILABLE (502). Hostinger failures are written to the Log section and update HOSTINGER in GET /api/status at once.
+         */
+        get: operations["listHostingerSites"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/github/repositories": {
         parameters: {
             query?: never;
@@ -300,6 +320,56 @@ export interface components {
             response?: string;
             /** @description Java stack trace */
             stackTrace?: string;
+        };
+        /** @description One website in the user's Hostinger hosting (Hostinger's website list) */
+        HostingerSite: {
+            /**
+             * @description The website's domain; null for a website with no domain attached
+             * @example example.com
+             */
+            domain: string | null;
+            /**
+             * @description The hosting account's username (CloudLinux websites); null for other platforms
+             * @example u123456789
+             */
+            username: string | null;
+            /**
+             * Format: int64
+             * @description The hosting order (plan) the website belongs to
+             * @example 12345
+             */
+            orderId: number | null;
+            /**
+             * @description What Hostinger detected on the site: wordpress, builder, horizons, nodejs or other
+             * @example wordpress
+             */
+            websiteType: string | null;
+            /**
+             * @description Root directory on the server (CloudLinux websites); null for other platforms
+             * @example /home/u123456789/domains/example.com/public_html
+             */
+            rootDirectory: string | null;
+            /** @description False when Hostinger has suspended the website */
+            enabled: boolean;
+            /**
+             * Format: date-time
+             * @description When the website was created (ISO-8601, UTC)
+             * @example 2024-01-15T10:30:00Z
+             */
+            createdAt: string | null;
+        };
+        /** @description The user's Hostinger websites, fetched from Hostinger just now */
+        HostingerSites: {
+            /** @description Sorted by domain (A-Z); websites without a domain last */
+            sites: components["schemas"]["HostingerSite"][];
+            /**
+             * Format: date-time
+             * @description When Dockline fetched this from Hostinger (ISO-8601, UTC)
+             * @example 2026-11-13T09:00:00Z
+             */
+            fetchedAt: string;
+            /** @description True when the list stopped at 10 pages of 100 and more websites exist */
+            truncated: boolean;
         };
         /** @description The user's repositories, fetched from GitHub just now */
         GithubRepositories: {
@@ -608,6 +678,53 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listHostingerSites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All websites, sorted by domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostingerSites"];
+                };
+            };
+            /** @description code HOSTINGER_NOT_CONNECTED: no Hostinger token saved; code HOSTINGER_TOKEN_REJECTED: Hostinger rejected the saved token (revoked or expired), replace it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code HOSTINGER_RATE_LIMITED: Hostinger's rate limit is reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code HOSTINGER_UNAVAILABLE: Hostinger could not be reached, timed out, failed or answered unexpectedly */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
             };
         };
     };
