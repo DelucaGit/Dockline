@@ -4,6 +4,10 @@ A Windows desktop app that brings GitHub and Hostinger together in one window.
 
 Planning lives in GitHub Issues — start with the PRD issue.
 
+## Setup
+
+To use "Connect to GitHub" you register a GitHub OAuth App once and give its Client ID to the app. Follow [docs/github-oauth-app-setup.md](docs/github-oauth-app-setup.md) (about five minutes, no client secret needed).
+
 ## Backend
 
 The backend lives in `backend/`: Java 25, Spring Boot 4, Maven. No Maven install is needed, the Maven Wrapper (`mvnw`) downloads it.
