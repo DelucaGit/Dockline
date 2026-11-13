@@ -1,7 +1,8 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, ipcMain, nativeTheme, session } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, session, shell } from 'electron'
 import { IPC } from '../shared/backend'
 import { BackendProcess } from './backend'
+import { isSafeExternalUrl } from './externalUrl'
 
 // Follow the Windows light/dark setting (Electron's default; explicit for clarity).
 nativeTheme.themeSource = 'system'
@@ -45,6 +46,16 @@ function createWindow(): void {
 void app.whenReady().then(() => {
   ipcMain.handle(IPC.getBackendState, () => backend.getState())
   ipcMain.handle(IPC.retryBackend, () => backend.start())
+  ipcMain.handle(IPC.openExternal, async (_event, url: unknown) => {
+    if (!isSafeExternalUrl(url)) throw new Error('Only https addresses can be opened.')
+    if (process.env['DOCKLINE_E2E_NO_BROWSER'] === '1') {
+      // Tests and CI: remember the address instead of opening a browser (read with app.evaluate).
+      const g = globalThis as { __docklineOpenedUrls?: string[] }
+      ;(g.__docklineOpenedUrls ??= []).push(url)
+      return
+    }
+    await shell.openExternal(url)
+  })
 
   // The renderer (a different origin) fetches the backend directly; allow that for 127.0.0.1 only.
   session.defaultSession.webRequest.onHeadersReceived(
