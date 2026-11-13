@@ -52,3 +52,22 @@ npm run generate:api     # regenerate API types from ../backend/openapi.json
 ```
 
 `generate:api` writes `desktop/src/renderer/src/api/schema.d.ts`. That file is committed; re-run the command after the backend's `openapi.json` changes. All user-facing text lives in `desktop/src/renderer/src/strings.ts`. The theme follows the Windows light/dark setting.
+
+### How the app starts the backend
+
+When the app opens, the Electron main process starts the backend as a child process on a free localhost port, waits until `/actuator/health` says `UP` (up to 60 seconds) and shows a loading screen meanwhile. If it fails (Java or jar missing, crash, timeout) an error screen with the reason and a Retry button is shown. When the app quits or crashes, the whole Java process tree is killed (`taskkill /T /F` on Windows), so nothing is left running.
+
+| What | How it is found |
+| --- | --- |
+| Java | `DOCKLINE_JAVA` (full path to `java`/`java.exe`), else `JAVA_HOME/bin/java`, else `java` on PATH. The backend needs Java 25. |
+| Backend jar | `DOCKLINE_BACKEND_JAR`, else `backend/target/dockline-backend-*.jar` (build it first with `./mvnw verify`). |
+
+So to run the whole app from Git Bash:
+
+```bash
+export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-25.0.5.8-hotspot"
+(cd backend && ./mvnw verify)
+cd desktop && npm run dev
+```
+
+The renderer talks to the main process only through the small `window.dockline` API in `desktop/src/preload/index.ts` (no Node integration in the window). The bundled Java runtime comes in a later task.

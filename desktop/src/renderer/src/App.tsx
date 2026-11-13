@@ -1,10 +1,11 @@
+import type { ReactNode } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { strings } from '@/strings'
 import { routes } from '@/routes'
 import { Placeholder } from '@/pages/Placeholder'
 
-export function App() {
+export function App({ footer }: { footer?: ReactNode }) {
   return (
     <div className="flex h-screen">
       <nav
@@ -27,6 +28,7 @@ export function App() {
             {label}
           </NavLink>
         ))}
+        <div className="mt-auto">{footer}</div>
       </nav>
       <main className="flex-1 overflow-auto p-6">
         <Routes>
