@@ -49,6 +49,16 @@
   <build>
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- Tests write their log files under target/, never into the real app-data folder -->
+          <environmentVariables>
+            <DOCKLINE_LOG_DIR>${project.build.directory}/test-logs</DOCKLINE_LOG_DIR>
+          </environmentVariables>
+        </configuration>
+      </plugin>
+      <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
         <executions>
@@ -59,6 +69,8 @@
             <configuration>
               <arguments>
                 <argument>--server.port=${openapi.export.port}</argument>
+                <!-- Keep build logs out of the real app-data folder -->
+                <argument>--dockline.log.dir=${project.build.directory}/export-logs</argument>
               </arguments>
             </configuration>
           </execution>
