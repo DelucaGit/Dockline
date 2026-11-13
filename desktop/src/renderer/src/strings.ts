@@ -75,6 +75,28 @@ export const strings = {
       startError: 'The connection could not be started. Please try again.',
       pollError: 'The connection could not be checked. Please try again.',
       setupPointer: 'See docs/github-oauth-app-setup.md for how to set this up.'
+    },
+    hostinger: {
+      heading: 'Hostinger',
+      notConnectedHint: 'Paste an API token to see your Hostinger sites and domains.',
+      tokenLabel: 'API token',
+      save: 'Save',
+      saving: 'Checking token…',
+      connected: 'Connected',
+      limited: 'Connected, with limits',
+      error: 'Connection problem',
+      saveError: 'The token could not be saved. Please try again.',
+      replaceHint: 'Paste a new token below to replace the saved one.',
+      help: 'Create a token in hPanel under Account → API (a token is shown only once), then paste it here.',
+      helpLink: 'Open the API page in hPanel',
+      helpUrl: 'https://hpanel.hostinger.com/api',
+      disconnect: 'Disconnect',
+      disconnecting: 'Disconnecting…',
+      confirmTitle: 'Disconnect from Hostinger?',
+      confirmText: 'Dockline forgets the saved Hostinger token. You can paste a token again at any time.',
+      confirmYes: 'Yes, disconnect',
+      confirmNo: 'Keep connected',
+      disconnectError: 'Disconnecting did not work. Please try again.'
     }
   },
   log: {
