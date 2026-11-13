@@ -6,6 +6,9 @@ import type { WireMock } from "./wiremock";
  * GET /api/hosting/v1/websites, the paged website list (`stubSites`), and GET /api/domains/v1/portfolio,
  * the domain list (`stubDomains`). Errors look like
  * Hostinger's documented ones: `{ message, correlation_id }`.
+ * A website's Git connection (shapes from Hostinger's OpenAPI document) has a fake for each case:
+ * `stubGitAutoDeployment` (connected through Hostinger's GitHub app), `stubGitRepositories` (a repository
+ * cloned in hPanel's Git section) and `stubGitNotConnected`.
  * The backend tests use the same fakes (backend/src/test/.../hostinger/HostingerStubs.java).
  *
  * A later stub for the same endpoint wins, so a test can change Hostinger's answer between two calls.
@@ -121,7 +124,8 @@ export interface FakeSite {
 }
 
 function websiteJson(site: FakeSite): Record<string, unknown> {
-  const username = site.username === undefined ? "u123456789" : site.username;
+  const username =
+    site.username === undefined ? DEFAULT_USERNAME : site.username;
   return {
     domain: site.domain,
     vhost_type: username === null ? null : "main",
@@ -343,4 +347,156 @@ export async function stubDomainsServerError(
       },
     },
   });
+}
+
+export const GIT_INSTALLATIONS_PATH = "/api/hosting/v1/git/installations";
+/** The installation every `stubGitAutoDeployment` fake goes through. */
+export const GIT_INSTALLATION_UUID = "018f5e2a-1234-7890-abcd-1234567890ab";
+
+/** The hosting account `stubSites` gives a site by default. */
+export const DEFAULT_USERNAME = "u123456789";
+
+export function gitRepositoriesPath(domain: string, username = DEFAULT_USERNAME): string {
+  return `/api/hosting/v1/accounts/${username}/websites/${domain}/git/repositories`;
+}
+
+export function gitAutoDeploymentPath(domain: string, username = DEFAULT_USERNAME): string {
+  return `/api/hosting/v1/accounts/${username}/websites/${domain}/git/auto-deployments/settings`;
+}
+
+/**
+ * The website's hPanel Git section lists these clone addresses (the first one in the document root, the others
+ * in dir-1, dir-2 ...), e.g. "git@github.com:octocat/my-site.git" or "https://***@github.com/octocat/my-site.git".
+ * An empty list means nothing is cloned there.
+ */
+export async function stubGitRepositories(
+  wiremock: WireMock,
+  domain: string,
+  repositoryUrls: string[],
+  username = DEFAULT_USERNAME,
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: gitRepositoriesPath(domain, username) },
+    response: {
+      status: 200,
+      jsonBody: repositoryUrls.map((url, i) => ({
+        repository_url: url,
+        branch: "main",
+        directory: i === 0 ? "" : `dir-${i}`,
+        webhook: {
+          url: `https://webhooks.hostinger.com/deploy/6f1ed002ab5595859014ebf0951522d${i}`,
+          provider: null,
+          setup_url: null,
+          tutorial_url: null,
+        },
+      })),
+    },
+  });
+}
+
+/**
+ * The website auto-deploys `owner/repository` (branch main, document root) through the installation
+ * GIT_INSTALLATION_UUID; `stubGitInstallations` says which provider that is.
+ */
+export async function stubGitAutoDeployment(
+  wiremock: WireMock,
+  domain: string,
+  repo: { owner: string; repository: string },
+  username = DEFAULT_USERNAME,
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: gitAutoDeploymentPath(domain, username) },
+    response: {
+      status: 200,
+      jsonBody: {
+        installation_uuid: GIT_INSTALLATION_UUID,
+        is_enabled: true,
+        owner: repo.owner,
+        repository: repo.repository,
+        branch: "main",
+        directory: "",
+      },
+    },
+  });
+}
+
+/** The website has no auto-deployment: every field is null, as Hostinger documents. */
+export async function stubGitNoAutoDeployment(
+  wiremock: WireMock,
+  domain: string,
+  username = DEFAULT_USERNAME,
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: gitAutoDeploymentPath(domain, username) },
+    response: {
+      status: 200,
+      jsonBody: {
+        installation_uuid: null,
+        is_enabled: null,
+        owner: null,
+        repository: null,
+        branch: null,
+        directory: null,
+      },
+    },
+  });
+}
+
+/** A website that is not Git-connected at all: no auto-deployment and an empty Git section. */
+export async function stubGitNotConnected(
+  wiremock: WireMock,
+  domain: string,
+  username = DEFAULT_USERNAME,
+): Promise<void> {
+  await stubGitNoAutoDeployment(wiremock, domain, username);
+  await stubGitRepositories(wiremock, domain, [], username);
+}
+
+/** The customer's one Git installation (GIT_INSTALLATION_UUID) and its provider. */
+export async function stubGitInstallations(
+  wiremock: WireMock,
+  provider: "github" | "gitlab" | "bitbucket" = "github",
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: GIT_INSTALLATIONS_PATH },
+    response: {
+      status: 200,
+      jsonBody: [
+        {
+          uuid: GIT_INSTALLATION_UUID,
+          provider,
+          account_login: "octocat",
+          account_type: "User",
+          account_avatar_url: null,
+          status: "active",
+          installed_at: "2026-01-15T10:30:00Z",
+          created_at: "2026-01-15T10:00:00Z",
+          has_oauth: true,
+        },
+      ],
+    },
+  });
+}
+
+/** Both Git endpoints of the website answer 500. */
+export async function stubGitServerError(
+  wiremock: WireMock,
+  domain: string,
+  username = DEFAULT_USERNAME,
+): Promise<void> {
+  for (const urlPath of [
+    gitAutoDeploymentPath(domain, username),
+    gitRepositoriesPath(domain, username),
+  ]) {
+    await wiremock.stubFor({
+      request: { method: "GET", urlPath },
+      response: {
+        status: 500,
+        jsonBody: {
+          message: "Server Error",
+          correlation_id: "c0ffee00-0000-4000-8000-000000000033",
+        },
+      },
+    });
+  }
 }
