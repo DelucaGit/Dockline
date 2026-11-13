@@ -142,6 +142,8 @@ Hostinger has no "log in with Hostinger", so the user pastes an API token create
 
 `GET /api/status` checks the saved Hostinger token at most once a minute (saving, deleting and recheck skip the wait): `200` = `CONNECTED`, `401`/`403` = `ERROR` (revoked or expired, replace the token; also written to the Log section), `429` or Hostinger unreachable/failing = `LIMITED`. All Hostinger calls go through `HostingerClient`. Tests fake Hostinger with `HostingerStubs` (backend) and `desktop/e2e/support/hostingerStubs.ts` (`hostingerEnv`, `stubSubscriptionsOk`, `stubUnauthorized`, `stubRateLimited`, `stubServerError`, `stubConnectionReset`).
 
+**Hostinger in Settings (desktop).** The Hostinger section has a password-type token field (never shown again once saved; cleared after every attempt), a link to hPanel's API page (`https://hpanel.hostinger.com/api`, opened via `openExternal`), "Save" (busy while the backend checks the token), the backend's message on `400`/`422`/`429`/`502`, and "Disconnect" with a confirmation. Opening Settings calls `POST /api/hostinger/recheck`. Tests: `SettingsHostinger.test.tsx` and `e2e/hostinger-connect.spec.ts`.
+
 ## End-to-end tests
 
 The end-to-end tests live in `desktop/e2e/`. [Playwright](https://playwright.dev) starts the **real** built Electron app, which starts the **real** backend jar, and checks what the user sees. They sit inside `desktop/` because they need its Electron binary and its built app (`out/`), so there is only one `package.json` to install.
