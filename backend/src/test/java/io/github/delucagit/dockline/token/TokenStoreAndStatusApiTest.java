@@ -24,8 +24,9 @@ import tools.jackson.databind.ObjectMapper;
  * read and deleted through the app's {@link TokenStore}, and the effect is checked over real HTTP.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        // GitHub calls go nowhere (nothing listens on port 9), never to the real GitHub.
-        properties = {"dockline.test-endpoints=true", "dockline.github.api-url=http://127.0.0.1:9"})
+        // GitHub and Hostinger calls go nowhere (nothing listens on port 9), never to the real APIs.
+        properties = {"dockline.test-endpoints=true", "dockline.github.api-url=http://127.0.0.1:9",
+                "dockline.hostinger.api-url=http://127.0.0.1:9"})
 @ExtendWith(OutputCaptureExtension.class)
 class TokenStoreAndStatusApiTest {
 
@@ -70,13 +71,13 @@ class TokenStoreAndStatusApiTest {
     }
 
     @Test
-    void withoutAStatusProviderTheStatusFollowsTheStoredToken() throws Exception {
-        // GitHub has its own status provider (checks the token with GitHub, see GithubConnectApiTest);
-        // Hostinger does not have one yet and uses the fallback.
+    void theStatusFollowsTheStoredToken() throws Exception {
+        // Both sources have their own status provider that checks a stored token with the API
+        // (see GithubConnectApiTest, HostingerTokenApiTest); here the API cannot be reached, so LIMITED.
         assertThat(states()).isEqualTo("GITHUB=NOT_CONNECTED,HOSTINGER=NOT_CONNECTED");
 
         tokenStore.save(Source.HOSTINGER, "hostinger-status-test-token");
-        assertThat(states()).isEqualTo("GITHUB=NOT_CONNECTED,HOSTINGER=CONNECTED");
+        assertThat(states()).isEqualTo("GITHUB=NOT_CONNECTED,HOSTINGER=LIMITED");
 
         tokenStore.delete(Source.HOSTINGER);
         assertThat(states()).isEqualTo("GITHUB=NOT_CONNECTED,HOSTINGER=NOT_CONNECTED");
@@ -92,7 +93,7 @@ class TokenStoreAndStatusApiTest {
         assertThat(response.body()).doesNotContain("hostinger-never-in-status-42");
         JsonNode hostinger = JSON.readTree(response.body()).get("sources").get(1);
         assertThat(hostinger.get("source").asString()).isEqualTo("HOSTINGER");
-        assertThat(hostinger.get("state").asString()).isEqualTo("CONNECTED");
+        assertThat(hostinger.get("state").asString()).isEqualTo("LIMITED");
     }
 
     @Test

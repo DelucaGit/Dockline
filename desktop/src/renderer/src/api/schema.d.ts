@@ -4,6 +4,50 @@
  */
 
 export interface paths {
+    "/api/hostinger/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Check a Hostinger API token with Hostinger, then save it
+         * @description Replaces any saved token, but only if Hostinger accepts the new one. On any error nothing is saved and an earlier token stays as it was.
+         */
+        put: operations["saveHostingerToken"];
+        post?: never;
+        /**
+         * Remove the Hostinger token from Dockline
+         * @description Afterwards HOSTINGER is NOT_CONNECTED. Does nothing when no token is saved.
+         */
+        delete: operations["deleteHostingerToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hostinger/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check the saved token with Hostinger now, skipping the cache
+         * @description GET /api/status re-checks the token at most once a minute; this forces a check.
+         */
+        post: operations["recheckHostinger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/github/recheck": {
         parameters: {
             query?: never;
@@ -123,19 +167,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /**
-         * @description CONNECTED: a token is stored and works (green). LIMITED: works, but not fully, e.g. missing permissions or rate-limited (yellow). ERROR: a token is stored but cannot be used, e.g. revoked, or the token store is unavailable (red). NOT_CONNECTED: no token is stored (red).
-         * @enum {string}
-         */
-        ConnectionState: "CONNECTED" | "LIMITED" | "ERROR" | "NOT_CONNECTED";
-        /** @enum {string} */
-        Source: "GITHUB" | "HOSTINGER";
-        /** @description Connection state of one source */
-        SourceStatus: {
-            source: components["schemas"]["Source"];
-            state: components["schemas"]["ConnectionState"];
-            /** @description Why the state is what it is (always for LIMITED and ERROR; may be set otherwise, e.g. 'Connected as octocat'); never contains a token */
-            message?: string | null;
+        /** @description A Hostinger API token created in hPanel */
+        HostingerTokenRequest: {
+            /** @description The API token; surrounding whitespace is ignored */
+            token: string;
         };
         ProblemDetail: {
             /** Format: uri */
@@ -149,6 +184,20 @@ export interface components {
             properties?: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * @description CONNECTED: a token is stored and works (green). LIMITED: works, but not fully, e.g. missing permissions or rate-limited (yellow). ERROR: a token is stored but cannot be used, e.g. revoked, or the token store is unavailable (red). NOT_CONNECTED: no token is stored (red).
+         * @enum {string}
+         */
+        ConnectionState: "CONNECTED" | "LIMITED" | "ERROR" | "NOT_CONNECTED";
+        /** @enum {string} */
+        Source: "GITHUB" | "HOSTINGER";
+        /** @description Connection state of one source */
+        SourceStatus: {
+            source: components["schemas"]["Source"];
+            state: components["schemas"]["ConnectionState"];
+            /** @description Why the state is what it is (always for LIMITED and ERROR; may be set otherwise, e.g. 'Connected as octocat'); never contains a token */
+            message?: string | null;
         };
         /** @description Show userCode and open verificationUri; then poll every intervalSeconds */
         GithubDeviceCode: {
@@ -241,6 +290,104 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    saveHostingerToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HostingerTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Hostinger accepted the token; it is saved (state CONNECTED) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceStatus"];
+                };
+            };
+            /** @description The token is missing, blank or too long */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Hostinger rejected the token (HTTP 401/403); not saved */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Hostinger's rate limit is reached; not saved, try again later */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Hostinger could not be reached or answered with an error; not saved */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    deleteHostingerToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    recheckHostinger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceStatus"];
+                };
+            };
+        };
+    };
     recheckGithub: {
         parameters: {
             query?: never;

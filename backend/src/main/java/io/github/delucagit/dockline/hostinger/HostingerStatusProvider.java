@@ -1,0 +1,138 @@
+package io.github.delucagit.dockline.hostinger;
+
+import io.github.delucagit.dockline.log.LogLevel;
+import io.github.delucagit.dockline.log.LogSource;
+import io.github.delucagit.dockline.log.ProblemLog;
+import io.github.delucagit.dockline.status.ConnectionState;
+import io.github.delucagit.dockline.status.SourceStatus;
+import io.github.delucagit.dockline.status.SourceStatusProvider;
+import io.github.delucagit.dockline.token.Source;
+import io.github.delucagit.dockline.token.TokenStore;
+import io.github.delucagit.dockline.token.TokenStoreUnavailableException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Objects;
+import java.util.Optional;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientException;
+
+/**
+ * The Hostinger status dot: checks the stored token with {@code GET /api/billing/v1/subscriptions}.
+ * <ul>
+ *   <li>no token: NOT_CONNECTED (Hostinger is not called)
+ *   <li>200: CONNECTED
+ *   <li>401 / 403: ERROR "revoked or expired, replace it", written to the Log section
+ *   <li>429 (rate limit): LIMITED, written to the Log section as a warning
+ *   <li>Hostinger unreachable or failing (5xx, timeout): LIMITED; the token may well be fine
+ * </ul>
+ * The result is cached for {@link #CACHE_TTL} so the sidebar's polling does not call Hostinger every time;
+ * saving, removing and {@link #recheck()} drop the cache. Problems are logged once per change, not on every check.
+ */
+@Component
+class HostingerStatusProvider implements SourceStatusProvider {
+
+    static final Duration CACHE_TTL = Duration.ofSeconds(60);
+    static final String REVOKED =
+            "Hostinger no longer accepts the saved token (revoked or expired). Replace the token in Settings.";
+
+    private final TokenStore tokenStore;
+    private final HostingerClient client;
+    private final ProblemLog problemLog;
+    private final Clock clock;
+
+    /** Guarded by this. */
+    private Cached cached;
+
+    private record Cached(String token, SourceStatus status, Instant checkedAt) {}
+
+    HostingerStatusProvider(TokenStore tokenStore, HostingerClient client, ProblemLog problemLog, Clock clock) {
+        this.tokenStore = tokenStore;
+        this.client = client;
+        this.problemLog = problemLog;
+        this.clock = clock;
+    }
+
+    @Override
+    public Source source() {
+        return Source.HOSTINGER;
+    }
+
+    @Override
+    public synchronized SourceStatus status() {
+        Optional<String> token;
+        try {
+            token = tokenStore.read(Source.HOSTINGER);
+        } catch (TokenStoreUnavailableException e) {
+            return new SourceStatus(Source.HOSTINGER, ConnectionState.ERROR, e.getMessage());
+        }
+        if (token.isEmpty()) {
+            cached = null;
+            return SourceStatus.of(Source.HOSTINGER, ConnectionState.NOT_CONNECTED);
+        }
+        Instant now = clock.instant();
+        if (cached != null && cached.token().equals(token.get())
+                && now.isBefore(cached.checkedAt().plus(CACHE_TTL))) {
+            return cached.status();
+        }
+        SourceStatus previous = cached != null && cached.token().equals(token.get()) ? cached.status() : null;
+        SourceStatus checked = check(token.get(), previous);
+        cached = new Cached(token.get(), checked, now);
+        return checked;
+    }
+
+    /** A token that was just checked and saved: remember it as CONNECTED without asking Hostinger again. */
+    synchronized SourceStatus connected(String token) {
+        SourceStatus status = SourceStatus.of(Source.HOSTINGER, ConnectionState.CONNECTED);
+        cached = new Cached(token, status, clock.instant());
+        return status;
+    }
+
+    /** Forgets the cached result, so the next {@link #status()} asks Hostinger. */
+    synchronized void invalidate() {
+        cached = null;
+    }
+
+    /** Asks Hostinger now, ignoring the cache (for "Check again"). */
+    synchronized SourceStatus recheck() {
+        // Keep the old result for "log only on change", but make it stale.
+        if (cached != null) {
+            cached = new Cached(cached.token(), cached.status(), Instant.MIN);
+        }
+        return status();
+    }
+
+    private SourceStatus check(String token, SourceStatus previous) {
+        String request = "GET " + client.subscriptionsUrl() + " (with the saved token)";
+        HostingerClient.Reply reply;
+        try {
+            reply = client.getSubscriptions(token);
+        } catch (RestClientException e) {
+            return logOnChange(previous, LogLevel.WARN, null, request, null, e,
+                    new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED,
+                            "Could not reach Hostinger: " + e.getMessage()));
+        }
+        int code = reply.status();
+        if (reply.ok()) {
+            return SourceStatus.of(Source.HOSTINGER, ConnectionState.CONNECTED);
+        }
+        if (reply.tokenRejected()) {
+            return logOnChange(previous, LogLevel.ERROR, code, request, reply.body(), null,
+                    new SourceStatus(Source.HOSTINGER, ConnectionState.ERROR, REVOKED));
+        }
+        String message = code == 429
+                ? "Hostinger's rate limit is reached; Dockline will work again shortly."
+                : "Hostinger answered with an error (HTTP " + code + "). Try again later.";
+        return logOnChange(previous, LogLevel.WARN, code, request, reply.body(), null,
+                new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED, message));
+    }
+
+    private SourceStatus logOnChange(SourceStatus previous, LogLevel level, Integer code, String request,
+            String response, Throwable error, SourceStatus result) {
+        if (!Objects.equals(previous, result)) {
+            problemLog.report(level, LogSource.HOSTINGER, "GET " + HostingerClient.SUBSCRIPTIONS_PATH, code,
+                    result.message(), request, response, error);
+        }
+        return result;
+    }
+}
