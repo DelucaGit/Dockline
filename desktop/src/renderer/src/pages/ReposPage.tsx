@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { statusKey } from '@/api/github'
 import { fetchRepositories, reposKey, type GithubRepository } from '@/api/repos'
 import { ViewHeader } from '@/components/ViewHeader'
-import { ViewEmpty, ViewError, ViewLoading } from '@/components/ViewState'
+import { CARD, ViewEmpty, ViewError, ViewLoading } from '@/components/ViewState'
 import { problemState, type ProblemState } from '@/lib/problemState'
 import { Button } from '@/components/ui/button'
 import { formatExactTime, formatRelativeTime } from '@/lib/relativeTime'
@@ -60,8 +60,9 @@ function ReposProblem({ problem, onRetry }: { problem: ProblemState; onRetry: ()
   }
   if (problem.kind === 'TOKEN_REJECTED') {
     return (
-      <div role="alert" className="mt-6 rounded-md border border-border p-4">
-        <p className="text-red-600 dark:text-red-400">{problem.detail ?? t.tokenRejected}</p>
+      <div role="alert" className={`mt-6 ${CARD}`}>
+        <h2 className="font-semibold text-red-600 dark:text-red-400">{t.tokenRejected}</h2>
+        {problem.detail && <p className="mt-1 text-sm text-muted-foreground">{problem.detail}</p>}
         <Button className="mt-3" onClick={() => navigate('/settings', { state: { reconnect: true } })}>
           {t.reconnect}
         </Button>
@@ -72,8 +73,8 @@ function ReposProblem({ problem, onRetry }: { problem: ProblemState; onRetry: ()
     problem.kind === 'RATE_LIMITED' && problem.retryAfterSeconds
       ? ` ${t.rateLimitedRetry.replace('{seconds}', String(problem.retryAfterSeconds))}`
       : ''
-  const fallback = problem.kind === 'RATE_LIMITED' ? t.rateLimited : t.loadError
-  return <ViewError message={`${problem.detail ?? fallback}${hint}`} onRetry={onRetry} />
+  const title = problem.kind === 'RATE_LIMITED' ? t.rateLimited : t.loadError
+  return <ViewError title={title} message={`${problem.detail ?? t.loadErrorHint}${hint}`} onRetry={onRetry} />
 }
 
 export function ReposPage({ baseUrl }: { baseUrl: string }) {

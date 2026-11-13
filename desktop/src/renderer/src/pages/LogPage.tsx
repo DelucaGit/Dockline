@@ -66,7 +66,7 @@ function CopyButton({ entry }: { entry: LogEntry }) {
   const label =
     state === 'copied' ? strings.log.copied : state === 'failed' ? strings.log.copyFailed : strings.log.copyForAi
   return (
-    <Button variant="ghost" size="sm" onClick={copy}>
+    <Button variant="outline" size="xs" onClick={copy}>
       {state === 'copied' ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
       {label}
     </Button>
@@ -99,6 +99,7 @@ function EntryRow({ entry }: { entry: LogEntry }) {
               <time dateTime={entry.time} className="ml-auto text-xs text-muted-foreground">
                 {new Date(entry.time).toLocaleString()}
               </time>
+              <CopyButton entry={entry} />
             </div>
             <p className="mt-1 break-words">{entry.message}</p>
           </div>
@@ -116,9 +117,6 @@ function EntryRow({ entry }: { entry: LogEntry }) {
           )}
         </div>
       </details>
-      <div className="flex justify-end border-t border-border px-3 py-1.5">
-        <CopyButton entry={entry} />
-      </div>
     </li>
   )
 }
@@ -146,7 +144,7 @@ export function LogPage({ baseUrl }: { baseUrl: string }) {
         <h1 className="mr-auto text-2xl font-semibold">{strings.log.title}</h1>
         <FilterSelect label={strings.log.filters.source} value={source} options={SOURCES} onChange={setSource} />
         <FilterSelect label={strings.log.filters.level} value={level} options={LEVELS} onChange={setLevel} />
-        <Button variant="ghost" onClick={() => void log.refetch()}>
+        <Button variant="outline" onClick={() => void log.refetch()}>
           <RefreshCw className={cn('size-4', log.isFetching && 'animate-spin')} aria-hidden />
           {strings.log.refresh}
         </Button>

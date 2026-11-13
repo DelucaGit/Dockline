@@ -26,7 +26,6 @@ test('a revoked token turns the dot red, "Replace token" fixes it, a bad one is 
   await expect(dot).toHaveAttribute('data-state', 'ERROR')
   await expect(window.getByRole('link', { name: 'Hostinger: error — token needs replacing' })).toBeVisible()
   await expect(dot.locator('span[aria-hidden]')).toHaveClass(/bg-red-500/)
-  await expect(window.getByRole('heading', { name: 'Replace token' })).toBeVisible()
   await expect(window.getByRole('button', { name: 'Replace Hostinger token' })).toBeVisible()
   await expect(window.getByText(/no longer accepts the saved token/)).toBeVisible()
 

@@ -14,6 +14,7 @@ import {
 } from '@/api/github'
 import { recheckHostinger, removeHostingerToken, saveHostingerToken } from '@/api/hostinger'
 import { Button } from '@/components/ui/button'
+import { CARD } from '@/components/ViewState'
 import { strings } from '@/strings'
 
 const t = strings.settings.github
@@ -40,7 +41,7 @@ function CopyCodeButton({ code }: { code: string }) {
     setTimeout(() => setState('idle'), 2000)
   }
   return (
-    <Button variant="ghost" size="sm" onClick={copy}>
+    <Button variant="outline" size="sm" onClick={copy}>
       {state === 'copied' ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
       {state === 'copied' ? t.codeCopied : state === 'failed' ? t.copyFailed : t.copyCode}
     </Button>
@@ -105,7 +106,7 @@ function Connecting({ baseUrl, code, onDone, onFailed, onCancel }: {
       <p role="status" className="text-sm font-medium">
         {t.waiting}
       </p>
-      <Button variant="ghost" onClick={onCancel}>
+      <Button variant="outline" onClick={onCancel}>
         {t.cancel}
       </Button>
     </div>
@@ -230,7 +231,7 @@ function GithubSection({ baseUrl }: { baseUrl: string }) {
               <Button onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>
                 {disconnect.isPending ? t.disconnecting : t.confirmYes}
               </Button>
-              <Button variant="ghost" onClick={() => setConfirming(false)}>
+              <Button variant="outline" onClick={() => setConfirming(false)}>
                 {t.confirmNo}
               </Button>
             </div>
@@ -238,7 +239,7 @@ function GithubSection({ baseUrl }: { baseUrl: string }) {
         ) : (
           <div className="flex gap-2">
             {github.state === 'ERROR' && connectButton(t.reconnect)}
-            <Button variant="ghost" onClick={() => setConfirming(true)}>
+            <Button variant="outline" onClick={() => setConfirming(true)}>
               {t.disconnect}
             </Button>
           </div>
@@ -248,7 +249,7 @@ function GithubSection({ baseUrl }: { baseUrl: string }) {
   }
 
   return (
-    <section aria-labelledby="github-heading" className="mt-6 max-w-xl rounded-md border border-border p-4">
+    <section aria-labelledby="github-heading" className={`mt-6 ${CARD}`}>
       <h2 id="github-heading" className="text-lg font-semibold">
         {t.heading}
       </h2>
@@ -375,8 +376,6 @@ function HostingerSection({ baseUrl }: { baseUrl: string }) {
         {hostinger.message && <p className="text-sm text-muted-foreground">{hostinger.message}</p>}
         {state === 'ERROR' && (
           <>
-            <h3 className="font-medium">{h.replaceToken}</h3>
-            <p className="text-sm text-muted-foreground">{h.replaceHint}</p>
             {form}
           </>
         )}
@@ -395,13 +394,13 @@ function HostingerSection({ baseUrl }: { baseUrl: string }) {
               <Button onClick={() => remove.mutate()} disabled={remove.isPending}>
                 {remove.isPending ? h.disconnecting : h.confirmYes}
               </Button>
-              <Button variant="ghost" onClick={() => setConfirming(false)}>
+              <Button variant="outline" onClick={() => setConfirming(false)}>
                 {h.confirmNo}
               </Button>
             </div>
           </div>
         ) : (
-          <Button variant="ghost" onClick={() => setConfirming(true)}>
+          <Button variant="outline" onClick={() => setConfirming(true)}>
             {h.disconnect}
           </Button>
         )}
@@ -410,7 +409,7 @@ function HostingerSection({ baseUrl }: { baseUrl: string }) {
   }
 
   return (
-    <section aria-labelledby="hostinger-heading" className="mt-6 max-w-xl rounded-md border border-border p-4">
+    <section aria-labelledby="hostinger-heading" className={`mt-6 ${CARD}`}>
       <h2 id="hostinger-heading" className="text-lg font-semibold">
         {h.heading}
       </h2>

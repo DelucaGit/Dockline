@@ -86,7 +86,7 @@ describe('replacing the Hostinger token', () => {
 
     const field = await screen.findByLabelText('API token')
     await waitFor(() => expect(field).toHaveFocus())
-    expect(screen.getByRole('heading', { name: 'Replace token' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Replace token' })).toBeInTheDocument()
   })
 
   it('an invalid new token is rejected with the message and the ERROR state stays', async () => {
