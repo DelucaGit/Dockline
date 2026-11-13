@@ -88,6 +88,32 @@ class HostingerStatusProvider implements SourceStatusProvider {
         return status;
     }
 
+    /**
+     * What a data call (such as the website list) just learned about the token; shown at once instead of
+     * waiting for the next check. Not logged here: the caller writes its own Log entry.
+     */
+    synchronized void observed(String token, SourceStatus status) {
+        cached = new Cached(token, status, clock.instant());
+    }
+
+    static SourceStatus revoked() {
+        return new SourceStatus(Source.HOSTINGER, ConnectionState.ERROR, REVOKED);
+    }
+
+    static SourceStatus rateLimited() {
+        return new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED,
+                "Hostinger's rate limit is reached; Dockline will work again shortly.");
+    }
+
+    static SourceStatus failing(int code) {
+        return new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED,
+                "Hostinger answered with an error (HTTP " + code + "). Try again later.");
+    }
+
+    static SourceStatus unreachable(RestClientException e) {
+        return new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED, "Could not reach Hostinger: " + e.getMessage());
+    }
+
     /** Forgets the cached result, so the next {@link #status()} asks Hostinger. */
     synchronized void invalidate() {
         cached = null;
@@ -108,23 +134,17 @@ class HostingerStatusProvider implements SourceStatusProvider {
         try {
             reply = client.getSubscriptions(token);
         } catch (RestClientException e) {
-            return logOnChange(previous, LogLevel.WARN, null, request, null, e,
-                    new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED,
-                            "Could not reach Hostinger: " + e.getMessage()));
+            return logOnChange(previous, LogLevel.WARN, null, request, null, e, unreachable(e));
         }
         int code = reply.status();
         if (reply.ok()) {
             return SourceStatus.of(Source.HOSTINGER, ConnectionState.CONNECTED);
         }
         if (reply.tokenRejected()) {
-            return logOnChange(previous, LogLevel.ERROR, code, request, reply.body(), null,
-                    new SourceStatus(Source.HOSTINGER, ConnectionState.ERROR, REVOKED));
+            return logOnChange(previous, LogLevel.ERROR, code, request, reply.body(), null, revoked());
         }
-        String message = code == 429
-                ? "Hostinger's rate limit is reached; Dockline will work again shortly."
-                : "Hostinger answered with an error (HTTP " + code + "). Try again later.";
         return logOnChange(previous, LogLevel.WARN, code, request, reply.body(), null,
-                new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED, message));
+                code == 429 ? rateLimited() : failing(code));
     }
 
     private SourceStatus logOnChange(SourceStatus previous, LogLevel level, Integer code, String request,

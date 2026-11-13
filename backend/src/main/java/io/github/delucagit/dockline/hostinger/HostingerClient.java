@@ -28,6 +28,10 @@ class HostingerClient {
      * websites or VPS, but always has a billing context). Answers 200 with a JSON array, 401 for a bad token.
      */
     static final String SUBSCRIPTIONS_PATH = "/api/billing/v1/subscriptions";
+    /** The websites in the user's hosting accounts (and ones shared with them), paged with page and per_page. */
+    static final String WEBSITES_PATH = "/api/hosting/v1/websites";
+    /** The largest page Hostinger allows for the website list. */
+    static final int WEBSITES_PER_PAGE = 100;
 
     private final ExternalApiProperties.Hostinger hostinger;
     private final RestClient http;
@@ -58,7 +62,23 @@ class HostingerClient {
 
     /** Lists the account's subscriptions; used to check that a token works. */
     Reply getSubscriptions(String token) {
-        return http.get().uri(subscriptionsUrl())
+        return get(subscriptionsUrl(), token);
+    }
+
+    /**
+     * One page (1-based) of the website list, {@value #WEBSITES_PER_PAGE} per page. The address is always built
+     * from the configured base URL, never taken from Hostinger's answer, so the token cannot be sent elsewhere.
+     */
+    Reply getWebsites(int page, String token) {
+        return get(websitesUrl(page), token);
+    }
+
+    String websitesUrl(int page) {
+        return hostinger.apiUrl() + WEBSITES_PATH + "?page=" + page + "&per_page=" + WEBSITES_PER_PAGE;
+    }
+
+    private Reply get(String url, String token) {
+        return http.get().uri(url)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .accept(MediaType.APPLICATION_JSON)
                 .exchange((request, response) -> new Reply(response.getStatusCode().value(), response.getHeaders(),
