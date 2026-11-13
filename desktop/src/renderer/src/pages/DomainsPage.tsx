@@ -102,10 +102,11 @@ export function DomainsPage({ baseUrl }: { baseUrl: string }) {
   const forceRefresh = useRef(false)
   const domains = useQuery({
     queryKey: domainsKey(baseUrl),
-    queryFn: () => {
-      const refresh = forceRefresh.current
+    queryFn: async () => {
+      // Cleared only after success, so react-query's automatic retries of a failed Refresh also skip the backend copy.
+      const answer = await fetchDomains(baseUrl, forceRefresh.current)
       forceRefresh.current = false
-      return fetchDomains(baseUrl, refresh)
+      return answer
     },
     refetchOnWindowFocus: false,
     refetchOnMount: 'always',
