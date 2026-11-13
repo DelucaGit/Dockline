@@ -17,7 +17,6 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
@@ -37,7 +36,10 @@ import tools.jackson.databind.ObjectMapper;
  * <ul>
  *   <li>no token: 409 {@value #NOT_CONNECTED} (Hostinger is not called, nothing logged)
  *   <li>401 / 403: 409 {@value #TOKEN_REJECTED}, status ERROR
- *   <li>429: 429 {@value #RATE_LIMITED} with Hostinger's Retry-After, status LIMITED
+ *   <li>Hostinger's 429: {@link HostingerClient} waits out a Retry-After of up to 10 s and retries (logging
+ *       each 429); a longer wait, or retries running out, is 429 {@value #RATE_LIMITED} at once with
+ *       {@code Retry-After} and {@code retryAfterSeconds} = seconds left, status LIMITED with the same countdown.
+ *       While that wait lasts, Hostinger is not called at all.
  *   <li>5xx or anything unexpected, unreachable, timeout or unreadable answer: 502 {@value #UNAVAILABLE},
  *       status LIMITED
  * </ul>
@@ -105,6 +107,11 @@ class HostingerSiteList {
     private HostingerClient.Reply fetch(int page, String token, boolean refresh) {
         try {
             return client.getWebsites(page, token, refresh);
+        } catch (HostingerRateLimitedException e) {
+            // The client already logged the 429; the status dot reads the same wait from the limiter.
+            long seconds = e.retryAfterSeconds();
+            throw new ApiProblem(HttpStatus.TOO_MANY_REQUESTS, RATE_LIMITED, "Hostinger rate limit reached",
+                    HostingerStatusProvider.rateLimited(e.retryAfter()).message(), Long.toString(seconds));
         } catch (RestClientException e) {
             SourceStatus unreachable = HostingerStatusProvider.unreachable(e);
             status.observed(token, unreachable);
@@ -123,14 +130,6 @@ class HostingerSiteList {
                     request(page), reply.body(), null);
             return new ApiProblem(HttpStatus.CONFLICT, TOKEN_REJECTED, "Hostinger rejected the token",
                     HostingerStatusProvider.REVOKED);
-        }
-        if (code == 429) {
-            SourceStatus limited = HostingerStatusProvider.rateLimited();
-            status.observed(token, limited);
-            problemLog.report(LogLevel.WARN, LogSource.HOSTINGER, ACTION, code, limited.message(), request(page),
-                    reply.body(), null);
-            return new ApiProblem(HttpStatus.TOO_MANY_REQUESTS, RATE_LIMITED, "Hostinger rate limit reached",
-                    limited.message(), retryAfter(reply));
         }
         SourceStatus failing = HostingerStatusProvider.failing(code);
         return unavailable(token, code, page, reply.body(), failing.message(), failing);
@@ -189,12 +188,6 @@ class HostingerSiteList {
     /** Hostinger sends e.g. {@code 2024-01-15T10:30:00+00:00}; {@code ...Z} works too. */
     private static Instant instant(JsonNode value) {
         return value.isString() ? OffsetDateTime.parse(value.asString()).toInstant() : null;
-    }
-
-    /** Hostinger's Retry-After in seconds; null when missing or not a number of seconds. */
-    private static String retryAfter(HostingerClient.Reply reply) {
-        String retryAfter = reply.headers().getFirst(HttpHeaders.RETRY_AFTER);
-        return retryAfter != null && retryAfter.strip().matches("\\d+") ? retryAfter.strip() : null;
     }
 
     private String request(int page) {

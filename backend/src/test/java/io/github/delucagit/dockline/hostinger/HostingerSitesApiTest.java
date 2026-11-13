@@ -218,7 +218,7 @@ class HostingerSitesApiTest {
 
         assertProblem(response, 429, HostingerSiteList.RATE_LIMITED);
         assertThat(response.headers().firstValue("Retry-After")).hasValue("42");
-        assertThat(hostinger()).startsWith("LIMITED: Hostinger's rate limit is reached");
+        assertThat(hostinger()).isEqualTo("LIMITED: Hostinger asked us to slow down; retrying in 42 s.");
         JsonNode entry = onlyLogEntry();
         assertThat(entry.get("level").asString()).isEqualTo("WARN");
         assertThat(entry.get("statusCode").asInt()).isEqualTo(429);

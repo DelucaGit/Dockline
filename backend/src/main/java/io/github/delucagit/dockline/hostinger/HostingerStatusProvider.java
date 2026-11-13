@@ -23,7 +23,9 @@ import org.springframework.web.client.RestClientException;
  *   <li>no token: NOT_CONNECTED (Hostinger is not called)
  *   <li>200: CONNECTED
  *   <li>401 / 403: ERROR "revoked or expired, replace it", written to the Log section
- *   <li>429 (rate limit): LIMITED, written to the Log section as a warning
+ *   <li>429 (rate limit): LIMITED with {@code retryAfterSeconds}, written to the Log section as a warning by
+ *       {@link HostingerClient}. While Hostinger's Retry-After wait is in effect (from any feature), the status
+ *       is LIMITED with the seconds left and Hostinger is not called; afterwards the token is checked again.
  *   <li>Hostinger unreachable or failing (5xx, timeout): LIMITED; the token may well be fine
  * </ul>
  * The result is cached for {@link #CACHE_TTL} so the sidebar's polling does not call Hostinger every time;
@@ -70,6 +72,13 @@ class HostingerStatusProvider implements SourceStatusProvider {
             cached = null;
             return SourceStatus.of(Source.HOSTINGER, ConnectionState.NOT_CONNECTED);
         }
+        Duration blocked = client.blockedFor();
+        if (blocked.isPositive()) {
+            // Ask Hostinger again (once) when the wait is over, instead of trusting a result from before it.
+            cached = cached != null && cached.token().equals(token.get())
+                    ? new Cached(cached.token(), cached.status(), Instant.MIN) : null;
+            return rateLimited(blocked);
+        }
         Instant now = clock.instant();
         if (cached != null && cached.token().equals(token.get())
                 && now.isBefore(cached.checkedAt().plus(CACHE_TTL))) {
@@ -100,9 +109,11 @@ class HostingerStatusProvider implements SourceStatusProvider {
         return new SourceStatus(Source.HOSTINGER, ConnectionState.ERROR, REVOKED);
     }
 
-    static SourceStatus rateLimited() {
+    /** Hostinger asked Dockline to wait {@code left} (429 with Retry-After). */
+    static SourceStatus rateLimited(Duration left) {
+        long seconds = HostingerRateLimitedException.seconds(left);
         return new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED,
-                "Hostinger's rate limit is reached; Dockline will work again shortly.");
+                "Hostinger asked us to slow down; retrying in " + seconds + " s.", Math.toIntExact(seconds));
     }
 
     static SourceStatus failing(int code) {
@@ -132,7 +143,9 @@ class HostingerStatusProvider implements SourceStatusProvider {
         String request = "GET " + client.subscriptionsUrl() + " (with the saved token)";
         HostingerClient.Reply reply;
         try {
-            reply = client.getSubscriptions(token);
+            reply = client.getSubscriptions(token, false);
+        } catch (HostingerRateLimitedException e) {
+            return rateLimited(e.retryAfter()); // already logged by the client
         } catch (RestClientException e) {
             return logOnChange(previous, LogLevel.WARN, null, request, null, e, unreachable(e));
         }
@@ -143,8 +156,7 @@ class HostingerStatusProvider implements SourceStatusProvider {
         if (reply.tokenRejected()) {
             return logOnChange(previous, LogLevel.ERROR, code, request, reply.body(), null, revoked());
         }
-        return logOnChange(previous, LogLevel.WARN, code, request, reply.body(), null,
-                code == 429 ? rateLimited() : failing(code));
+        return logOnChange(previous, LogLevel.WARN, code, request, reply.body(), null, failing(code));
     }
 
     private SourceStatus logOnChange(SourceStatus previous, LogLevel level, Integer code, String request,
