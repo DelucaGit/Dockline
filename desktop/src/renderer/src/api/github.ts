@@ -11,7 +11,11 @@ export class ApiProblem extends Error {
   constructor(
     readonly status: number,
     readonly title: string | undefined,
-    readonly detail: string | undefined
+    readonly detail: string | undefined,
+    /** The stable machine-readable `code` of the problem (e.g. GITHUB_RATE_LIMITED), when the backend sent one. */
+    readonly code?: string,
+    /** Seconds from the Retry-After header, when the backend passed it on. */
+    readonly retryAfterSeconds?: number
   ) {
     super(detail ?? title ?? `Request failed with ${status}`)
   }

@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -48,13 +49,27 @@ function setup(first: Partial<GithubRepositories> = {}) {
   }
 }
 
+function Where() {
+  const loc = useLocation()
+  return <p data-testid="where">{loc.pathname + (loc.state ? JSON.stringify(loc.state) : '')}</p>
+}
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
-    <QueryClientProvider client={client}>
-      <ReposPage baseUrl={BASE_URL} />
-    </QueryClientProvider>
+  const invalidate = vi.spyOn(client, 'invalidateQueries')
+  render(
+    <MemoryRouter initialEntries={['/repos']}>
+      <QueryClientProvider client={client}>
+        <ReposPage baseUrl={BASE_URL} />
+        <Where />
+      </QueryClientProvider>
+    </MemoryRouter>
   )
+  return { invalidate }
+}
+
+function problem(status: number, code: string, detail: string, headers: Record<string, string> = {}) {
+  return new Response(JSON.stringify({ status, code, detail }), { status, headers })
 }
 
 describe('ReposPage', () => {
@@ -147,5 +162,56 @@ describe('ReposPage', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('octo/a')).toBeInTheDocument()
     expect(fake.openExternal).not.toHaveBeenCalled()
+  })
+
+  it('not connected: friendly message with a button to Settings', async () => {
+    const user = userEvent.setup()
+    setup()
+    vi.stubGlobal('fetch', vi.fn(async () => problem(409, 'GITHUB_NOT_CONNECTED', 'Connect GitHub first.')))
+    renderPage()
+    expect(await screen.findByText('GitHub is not connected')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open Settings' }))
+    expect(screen.getByTestId('where')).toHaveTextContent('/settings')
+    expect(screen.getByTestId('where')).not.toHaveTextContent('reconnect')
+  })
+
+  it('revoked token: Reconnect opens Settings asking to start the device flow, and the status is refreshed', async () => {
+    const user = userEvent.setup()
+    setup()
+    vi.stubGlobal('fetch', vi.fn(async () => problem(409, 'GITHUB_TOKEN_REJECTED', 'GitHub rejected the token.')))
+    const { invalidate } = renderPage()
+    expect(await screen.findByRole('alert')).toHaveTextContent('GitHub rejected the token.')
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['status', BASE_URL] })
+    expect(invalidate).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }))
+    expect(screen.getByTestId('where')).toHaveTextContent('/settings{"reconnect":true}')
+  })
+
+  it('rate limited: shows the message and the Retry-After hint, with Try again', async () => {
+    setup()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => problem(429, 'GITHUB_RATE_LIMITED', 'GitHub rate limit reached.', { 'Retry-After': '42' }))
+    )
+    renderPage()
+    expect(await screen.findByRole('alert')).toHaveTextContent('GitHub rate limit reached. Try again in about 42 seconds.')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
+  it('unavailable: Try again recovers and shows the list', async () => {
+    const user = userEvent.setup()
+    setup()
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(problem(502, 'GITHUB_UNAVAILABLE', 'GitHub did not answer.'))
+        .mockImplementation(async () => new Response(JSON.stringify({ repositories: [repo('a')], fetchedAt: 'x', truncated: false })))
+    )
+    renderPage()
+    expect(await screen.findByRole('alert')).toHaveTextContent('GitHub did not answer.')
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('octo/a')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

@@ -44,7 +44,15 @@ export const strings = {
     noPushes: 'No pushes yet',
     openOnGithub: 'Open on GitHub',
     truncated: 'Showing the first 5,000 repositories; more exist on GitHub.',
-    loadError: 'Could not load your repositories.'
+    loadError: 'Could not load your repositories.',
+    notConnected: 'GitHub is not connected',
+    notConnectedHint: 'Connect your GitHub account in Settings to see your repositories.',
+    goToSettings: 'Open Settings',
+    tokenRejected: 'GitHub no longer accepts the saved token.',
+    reconnect: 'Reconnect',
+    rateLimited: 'GitHub is limiting requests right now.',
+    // {seconds} is replaced with the Retry-After value.
+    rateLimitedRetry: 'Try again in about {seconds} seconds.'
   },
   connections: {
     heading: 'Connections',

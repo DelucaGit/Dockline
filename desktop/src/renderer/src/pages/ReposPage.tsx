@@ -1,7 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import { statusKey } from '@/api/github'
 import { fetchRepositories, reposKey, type GithubRepository } from '@/api/repos'
 import { ViewHeader } from '@/components/ViewHeader'
 import { ViewEmpty, ViewError, ViewLoading } from '@/components/ViewState'
+import { problemState, type ProblemState } from '@/lib/problemState'
+import { Button } from '@/components/ui/button'
 import { formatExactTime, formatRelativeTime } from '@/lib/relativeTime'
 import { strings } from '@/strings'
 
@@ -39,6 +44,38 @@ function RepoRow({ repo }: { repo: GithubRepository }) {
   )
 }
 
+function ReposProblem({ problem, onRetry }: { problem: ProblemState; onRetry: () => void }) {
+  const t = strings.repos
+  const navigate = useNavigate()
+  if (problem.kind === 'NOT_CONNECTED') {
+    return (
+      <div className="mt-8 text-center">
+        <p className="text-lg font-medium">{t.notConnected}</p>
+        <p className="mt-1 text-muted-foreground">{problem.detail ?? t.notConnectedHint}</p>
+        <Button className="mt-3" onClick={() => navigate('/settings')}>
+          {t.goToSettings}
+        </Button>
+      </div>
+    )
+  }
+  if (problem.kind === 'TOKEN_REJECTED') {
+    return (
+      <div role="alert" className="mt-6 rounded-md border border-border p-4">
+        <p className="text-red-600 dark:text-red-400">{problem.detail ?? t.tokenRejected}</p>
+        <Button className="mt-3" onClick={() => navigate('/settings', { state: { reconnect: true } })}>
+          {t.reconnect}
+        </Button>
+      </div>
+    )
+  }
+  const hint =
+    problem.kind === 'RATE_LIMITED' && problem.retryAfterSeconds
+      ? ` ${t.rateLimitedRetry.replace('{seconds}', String(problem.retryAfterSeconds))}`
+      : ''
+  const fallback = problem.kind === 'RATE_LIMITED' ? t.rateLimited : t.loadError
+  return <ViewError message={`${problem.detail ?? fallback}${hint}`} onRetry={onRetry} />
+}
+
 export function ReposPage({ baseUrl }: { baseUrl: string }) {
   // Fresh on open and on Refresh only: no timer, no refetch on focus. Every visit to the page refetches.
   const repos = useQuery({
@@ -49,7 +86,14 @@ export function ReposPage({ baseUrl }: { baseUrl: string }) {
     staleTime: 0,
     gcTime: 0
   })
-  const data = repos.data
+  const data = repos.isError ? undefined : repos.data // a failed refresh shows the error, not a stale list
+  const queryClient = useQueryClient()
+
+  // The backend flips the GitHub status when a call fails (e.g. a revoked token); refresh the sidebar dot now.
+  // Only the status query is touched: nothing Hostinger-specific is refetched.
+  useEffect(() => {
+    if (repos.isError) void queryClient.invalidateQueries({ queryKey: statusKey(baseUrl) })
+  }, [repos.isError, repos.errorUpdatedAt, baseUrl, queryClient])
 
   return (
     <section>
@@ -60,12 +104,7 @@ export function ReposPage({ baseUrl }: { baseUrl: string }) {
         fetchedAt={data?.fetchedAt}
       />
       {repos.isPending && <ViewLoading />}
-      {repos.isError && (
-        <ViewError
-          message={repos.error instanceof Error ? repos.error.message : strings.repos.loadError}
-          onRetry={() => void repos.refetch()}
-        />
-      )}
+      {repos.isError && <ReposProblem problem={problemState(repos.error)} onRetry={() => void repos.refetch()} />}
       {data && data.repositories.length === 0 && <ViewEmpty title={strings.repos.empty} />}
       {data && data.repositories.length > 0 && (
         <ul aria-label={strings.repos.title} className="mt-4 space-y-2">
