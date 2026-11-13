@@ -37,3 +37,18 @@ SERVER_PORT=0 java -jar target/dockline-backend-0.1.0-SNAPSHOT.jar
 | Swagger UI | `http://localhost:<port>/swagger-ui.html` |
 
 The build also writes the OpenAPI description to **`backend/openapi.json`** (committed, so the desktop app can generate its API types from it). During `verify` the build briefly starts the app on port 18089 to export it; change that with `-Dopenapi.export.port=...` if the port is busy.
+
+## Desktop app
+
+The desktop app lives in `desktop/`: Electron, React, TypeScript, Tailwind CSS, shadcn/ui and TanStack Query, built with electron-vite. Node 24 and npm are required.
+
+```bash
+cd desktop
+npm install              # install dependencies (also downloads the Electron binary)
+npm run dev              # start the app in development mode (hot reload)
+npm test                 # run the frontend tests (Vitest + Testing Library)
+npm run build            # type-check and build
+npm run generate:api     # regenerate API types from ../backend/openapi.json
+```
+
+`generate:api` writes `desktop/src/renderer/src/api/schema.d.ts`. That file is committed; re-run the command after the backend's `openapi.json` changes. All user-facing text lives in `desktop/src/renderer/src/strings.ts`. The theme follows the Windows light/dark setting.
