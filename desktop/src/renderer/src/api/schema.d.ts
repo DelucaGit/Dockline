@@ -3,10 +3,68 @@
  * Do not make direct changes to the file.
  */
 
-export type paths = Record<string, never>;
+export interface paths {
+    "/api/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent warnings and errors, newest first (at most 500) */
+        get: operations["listLogEntries"];
+        put?: never;
+        post?: never;
+        /** Clears the list (log files are kept) */
+        delete: operations["clearLogEntries"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+}
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: never;
+    schemas: {
+        /** @enum {string} */
+        LogSource: "GITHUB" | "HOSTINGER" | "BACKEND";
+        /** @enum {string} */
+        LogLevel: "WARN" | "ERROR";
+        /** @description A warning or error reported by the backend. Tokens are always masked. */
+        LogEntry: {
+            /**
+             * Format: int64
+             * @description Unique within one backend run; newer entries have higher ids
+             */
+            id: number;
+            /**
+             * Format: date-time
+             * @description When it happened (ISO-8601, UTC)
+             */
+            time: string;
+            level: components["schemas"]["LogLevel"];
+            source: components["schemas"]["LogSource"];
+            /** @description What the backend was doing, e.g. "GET /user" */
+            action: string;
+            /**
+             * Format: int32
+             * @description HTTP status code involved, if any
+             */
+            statusCode?: number;
+            message: string;
+            context: components["schemas"]["LogEntryContext"];
+        };
+        LogEntryContext: {
+            /** @description Backend version */
+            appVersion: string;
+            /** @description The request that failed (method, URL, relevant headers/body) */
+            request?: string;
+            /** @description The response that came back */
+            response?: string;
+            /** @description Java stack trace */
+            stackTrace?: string;
+        };
+    };
     responses: never;
     parameters: never;
     requestBodies: never;
@@ -14,4 +72,48 @@ export interface components {
     pathItems: never;
 }
 export type $defs = Record<string, never>;
-export type operations = Record<string, never>;
+export interface operations {
+    listLogEntries: {
+        parameters: {
+            query?: {
+                /** @description Only entries from this source */
+                source?: components["schemas"]["LogSource"];
+                /** @description Only entries with this level */
+                level?: components["schemas"]["LogLevel"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogEntry"][];
+                };
+            };
+        };
+    };
+    clearLogEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+}
