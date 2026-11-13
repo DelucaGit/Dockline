@@ -80,6 +80,23 @@ The backend reads the base URLs of the external APIs from Spring properties. The
 | `dockline.github.oauth-url` | `DOCKLINE_GITHUB_OAUTH_URL` | `https://github.com` |
 | `dockline.hostinger.api-url` | `DOCKLINE_HOSTINGER_API_URL` | `https://developers.hostinger.com` |
 
+### Logging and the Log API
+
+**Log files.** The backend writes `dockline.log` to `%APPDATA%\Dockline\logs` on Windows (`~/.local/share/Dockline/logs` elsewhere). Change the folder with `--dockline.log.dir=...` or `DOCKLINE_LOG_DIR`. The file rolls over every day and at 10 MB; files older than 14 days are deleted, and all of them together stay under 100 MB (`backend/src/main/resources/logback-spring.xml`). Backend tests and the end-to-end tests write their logs to a temporary folder instead.
+
+**Token masking.** Every line written to the log files or the console, and every log entry the API returns, goes through `SecretMasker`. It replaces GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`), `Authorization:` values, `Bearer ...` values (how Hostinger tokens are sent) and `token=` / `"access_token":` style values with `****`. Code that stores a real token calls `SecretMasker.register(token)` so that exact value is masked everywhere too.
+
+**Reporting a problem.** Backend code calls `ProblemLog.report(level, source, action, statusCode, message, request, response, exception)`. Any unexpected exception in a REST handler is reported automatically as an `ERROR` from `BACKEND` with its stack trace, and answered with a 500 problem response (masked). The newest 500 entries are kept in memory.
+
+| Request | What it does |
+| --- | --- |
+| `GET /api/log?source=GITHUB\|HOSTINGER\|BACKEND&level=WARN\|ERROR` | Recent warnings and errors, newest first (both filters optional) |
+| `DELETE /api/log` | Clears the list (`204`); the log files are kept |
+
+Each entry: `id`, `time` (ISO-8601, UTC), `level`, `source`, `action`, `statusCode` (left out if none), `message`, and `context` with `appVersion`, `request`, `response`, `stackTrace` (each left out if none).
+
+**Test-only endpoints.** With `DOCKLINE_TEST_ENDPOINTS=true` (or `--dockline.test-endpoints=true`) the backend also offers `POST /api/test/report-error` (query parameters `level`, `source`, `action`, `statusCode`, `message`, all optional; every text includes a fake GitHub token, so tests can check masking) and `POST /api/test/fail` (throws an unexpected exception). They are **off by default**, so they do not exist in a normal run, and are never part of `openapi.json`. The end-to-end tests turn them on through the environment, which the desktop app passes on to the backend.
+
 The renderer talks to the main process only through the small `window.dockline` API in `desktop/src/preload/index.ts` (no Node integration in the window). The bundled Java runtime comes in a later task.
 
 ## End-to-end tests
