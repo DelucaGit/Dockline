@@ -35,7 +35,7 @@ public class ProblemLog {
     /** Newest first. Guarded by itself. */
     private final Deque<LogEntry> entries = new ArrayDeque<>();
 
-    ProblemLog(@Value("${dockline.app-version:unknown}") String appVersion) {
+    public ProblemLog(@Value("${dockline.app-version:unknown}") String appVersion) {
         this.appVersion = appVersion;
     }
 

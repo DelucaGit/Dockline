@@ -85,6 +85,8 @@
           <!-- Tests write their log files under target/, never into the real app-data folder -->
           <environmentVariables>
             <DOCKLINE_LOG_DIR>${project.build.directory}/test-logs</DOCKLINE_LOG_DIR>
+            <!-- ...nor read or write the real settings file -->
+            <DOCKLINE_SETTINGS_DIR>${project.build.directory}/test-settings</DOCKLINE_SETTINGS_DIR>
             <!-- ...and never touch the real Windows Credential Manager -->
             <DOCKLINE_TOKEN_STORE>memory</DOCKLINE_TOKEN_STORE>
           </environmentVariables>
@@ -103,6 +105,7 @@
                 <argument>--server.port=${openapi.export.port}</argument>
                 <!-- Keep build logs out of the real app-data folder -->
                 <argument>--dockline.log.dir=${project.build.directory}/export-logs</argument>
+                <argument>--dockline.settings.dir=${project.build.directory}/export-settings</argument>
                 <argument>--dockline.token-store=memory</argument>
               </arguments>
             </configuration>
