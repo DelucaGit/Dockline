@@ -293,7 +293,7 @@ The auto-deployment is asked first and wins; the Git section is only asked when 
 
 - a website without a `username` or `domain` (it cannot be asked about);
 - a repository on another host (GitLab, Bitbucket, a private server): Dockline only links GitHub repositories;
-- a website for which Hostinger answers `404` or `422` on these endpoints.
+- a website for which Hostinger answers `404` or `422` on these endpoints (that answer is kept for 5 minutes like a successful one, so such a website is not asked about again on every view).
 
 **Staying under the request cap.** Finding a Git connection costs one or two Hostinger requests per site (plus one for the installations), so:
 

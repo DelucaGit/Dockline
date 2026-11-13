@@ -202,7 +202,8 @@ class HostingerGitConnections {
     /** Hostinger's successful answer; empty when it says the website has no Git at all (404 or 422). */
     private Optional<HostingerClient.Reply> get(String path, String token, Mode mode) {
         if (mode == Mode.SAVED_ONLY) {
-            return Optional.of(client.savedGit(path, token).orElseThrow(NotSaved::new));
+            HostingerClient.Reply saved = client.savedGit(path, token).orElseThrow(NotSaved::new);
+            return saved.noGit() ? Optional.empty() : Optional.of(saved);
         }
         HostingerClient.Reply reply;
         try {
@@ -224,7 +225,7 @@ class HostingerGitConnections {
             return Optional.of(reply);
         }
         int code = reply.status();
-        if (code == 404 || code == 422) {
+        if (reply.noGit()) {
             return Optional.empty();
         }
         if (reply.tokenRejected()) {

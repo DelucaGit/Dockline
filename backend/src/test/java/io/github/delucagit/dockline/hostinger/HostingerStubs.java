@@ -86,6 +86,14 @@ public final class HostingerStubs {
         gitRepositories(hostinger, username, domain);
     }
 
+    /** A website of a kind that has no Git at all: Hostinger answers 404 on both Git paths. */
+    public static void gitNotAvailable(WireMockServer hostinger, String username, String domain) {
+        hostinger.stubFor(get(urlPathEqualTo(gitAutoDeploymentPath(username, domain))).willReturn(error(404,
+                "{\"message\":\"Not Found\",\"correlation_id\":\"c0ffee00-0000-4000-8000-000000000031\"}")));
+        hostinger.stubFor(get(urlPathEqualTo(gitRepositoriesPath(username, domain))).willReturn(error(404,
+                "{\"message\":\"Not Found\",\"correlation_id\":\"c0ffee00-0000-4000-8000-000000000031\"}")));
+    }
+
     /** The customer's one Git installation ({@link #GIT_INSTALLATION_UUID}); provider github, gitlab or bitbucket. */
     public static void gitInstallations(WireMockServer hostinger, String provider) {
         hostinger.stubFor(get(urlPathEqualTo(GIT_INSTALLATIONS_PATH)).willReturn(okJson("""
