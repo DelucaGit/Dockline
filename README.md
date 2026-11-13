@@ -132,6 +132,8 @@ GitHub uses the **device flow**: the app shows a short code, the user enters it 
 
 **Repos view (desktop).** The Repos page fetches on open and on **Refresh** only (no timer, no refetch on window focus), shows each repository with a Private/Public badge, the last push as a relative time (exact time on hover) and a "Last updated" time; clicking a name opens it on GitHub in the default browser. Its reusable pieces for the Sites and Domains views are `components/ViewHeader.tsx` (title, Last updated, Refresh), `components/ViewState.tsx` (loading / empty / error) and `lib/relativeTime.ts`.
 
+**Repos errors.** The Repos view switches on the backend problem `code` (`lib/problemState.ts`, reusable for Sites/Domains): not connected links to Settings, a rejected token offers Reconnect (starts the device flow), rate limits and outages offer Try again; a failed load shows the error instead of the list, and never touches Hostinger.
+
 Errors are `application/problem+json` with a stable `code` property for the UI and a readable `detail`:
 
 | Status | `code` | When |
