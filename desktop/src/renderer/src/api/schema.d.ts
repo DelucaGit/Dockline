@@ -163,6 +163,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/github/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The user's repositories, fetched from GitHub now
+         * @description Every call asks GitHub (no cache) and follows all pages. Errors are problem responses with a stable `code` property: GITHUB_NOT_CONNECTED (409), GITHUB_TOKEN_REJECTED (409, reconnect), GITHUB_RATE_LIMITED (429, Retry-After header when known) and GITHUB_UNAVAILABLE (502). GitHub failures are written to the Log section and update GITHUB in GET /api/status at once.
+         */
+        get: operations["listGithubRepositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -281,6 +301,50 @@ export interface components {
             /** @description Java stack trace */
             stackTrace?: string;
         };
+        /** @description The user's repositories, fetched from GitHub just now */
+        GithubRepositories: {
+            /** @description Most recently pushed first; never-pushed ones last */
+            repositories: components["schemas"]["GithubRepository"][];
+            /**
+             * Format: date-time
+             * @description When Dockline fetched this from GitHub (ISO-8601, UTC)
+             * @example 2026-11-13T09:00:00Z
+             */
+            fetchedAt: string;
+            /** @description True when the list stopped at 50 pages of 100 and more repositories exist */
+            truncated: boolean;
+        };
+        /** @description One repository the user owns, collaborates on or sees through an organization */
+        GithubRepository: {
+            /** @example dockline */
+            name: string;
+            /**
+             * @description owner/name
+             * @example octocat/dockline
+             */
+            fullName: string;
+            visibility: components["schemas"]["GithubVisibility"];
+            /**
+             * Format: date-time
+             * @description Last push (ISO-8601, UTC); null for a repository nobody has pushed to
+             * @example 2026-11-12T08:15:30Z
+             */
+            lastPushAt: string | null;
+            /**
+             * @description The repository's page on GitHub
+             * @example https://github.com/octocat/dockline
+             */
+            htmlUrl: string;
+            /** @description A fork of another repository */
+            fork: boolean;
+            /** @description Archived (read-only) on GitHub */
+            archived: boolean;
+        };
+        /**
+         * @description PRIVATE: only people with access see it. PUBLIC: anyone can.
+         * @enum {string}
+         */
+        GithubVisibility: "PRIVATE" | "PUBLIC";
     };
     responses: never;
     parameters: never;
@@ -544,6 +608,53 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listGithubRepositories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All repositories, most recently pushed first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubRepositories"];
+                };
+            };
+            /** @description code GITHUB_NOT_CONNECTED: no GitHub token saved; code GITHUB_TOKEN_REJECTED: GitHub rejected the saved token (revoked or expired), reconnect */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code GITHUB_RATE_LIMITED: GitHub's rate limit is reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code GITHUB_UNAVAILABLE: GitHub could not be reached, timed out, failed or answered unexpectedly */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
             };
         };
     };

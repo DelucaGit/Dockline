@@ -1,8 +1,12 @@
 package io.github.delucagit.dockline.log;
 
+import io.github.delucagit.dockline.ApiProblem;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
@@ -19,6 +23,17 @@ class RestErrorHandler extends ResponseEntityExceptionHandler {
 
     RestErrorHandler(ProblemLog problemLog) {
         this.problemLog = problemLog;
+    }
+
+    /** An expected failure of a data endpoint; the endpoint has already written any Log entry it needs. */
+    @ExceptionHandler(ApiProblem.class)
+    ResponseEntity<ProblemDetail> apiProblem(ApiProblem problem) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(problem.status())
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON);
+        if (problem.retryAfter() != null) {
+            response.header(HttpHeaders.RETRY_AFTER, problem.retryAfter());
+        }
+        return response.body(problem.toProblemDetail());
     }
 
     @ExceptionHandler(Exception.class)

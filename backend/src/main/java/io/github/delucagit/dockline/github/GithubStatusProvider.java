@@ -92,6 +92,43 @@ class GithubStatusProvider implements SourceStatusProvider {
         cached = null;
     }
 
+    /**
+     * Takes the outcome of another GitHub call (e.g. listing repositories) as the current status, so
+     * {@code GET /api/status} shows a revoked token or a rate limit at once. The caller logs the problem itself.
+     */
+    synchronized void observed(String token, SourceStatus status) {
+        cached = new Cached(token, status, clock.instant());
+    }
+
+    static SourceStatus revoked() {
+        return new SourceStatus(Source.GITHUB, ConnectionState.ERROR, REVOKED);
+    }
+
+    static SourceStatus rateLimited() {
+        return new SourceStatus(Source.GITHUB, ConnectionState.LIMITED,
+                "GitHub's rate limit is reached; Dockline will work again when it resets.");
+    }
+
+    static SourceStatus refused(int code) {
+        return new SourceStatus(Source.GITHUB, ConnectionState.LIMITED, "GitHub refused access (HTTP " + code + ").");
+    }
+
+    static SourceStatus failing(int code) {
+        return new SourceStatus(Source.GITHUB, ConnectionState.LIMITED,
+                "GitHub answered with an error (HTTP " + code + "). Try again later.");
+    }
+
+    static SourceStatus unreachable(RestClientException e) {
+        return new SourceStatus(Source.GITHUB, ConnectionState.LIMITED, "Could not reach GitHub: " + e.getMessage());
+    }
+
+    /** 429, or 403 with no requests left or a Retry-After (GitHub's primary and secondary rate limits). */
+    static boolean isRateLimit(GithubClient.Reply reply) {
+        return reply.status() == 429 || (reply.status() == 403
+                && ("0".equals(reply.headers().getFirst("x-ratelimit-remaining"))
+                        || reply.headers().getFirst("retry-after") != null));
+    }
+
     /** Asks GitHub now, ignoring the cache (for "Reconnect" / "Check again"). */
     synchronized SourceStatus recheck() {
         // Keep the old result for "log only on change", but make it stale.
@@ -108,9 +145,7 @@ class GithubStatusProvider implements SourceStatusProvider {
         try {
             reply = client.getUser(token);
         } catch (RestClientException e) {
-            return logOnChange(previous, LogLevel.WARN, null, request, null, e,
-                    new SourceStatus(Source.GITHUB, ConnectionState.LIMITED,
-                            "Could not reach GitHub: " + e.getMessage()));
+            return logOnChange(previous, LogLevel.WARN, null, request, null, e, unreachable(e));
         }
         int code = reply.status();
         if (reply.ok()) {
@@ -118,20 +153,13 @@ class GithubStatusProvider implements SourceStatusProvider {
                     .map(login -> "Connected as " + login).orElse(null));
         }
         if (code == 401) {
-            return logOnChange(previous, LogLevel.ERROR, code, request, reply.body(), null,
-                    new SourceStatus(Source.GITHUB, ConnectionState.ERROR, REVOKED));
+            return logOnChange(previous, LogLevel.ERROR, code, request, reply.body(), null, revoked());
         }
         if (code == 403 || code == 429) {
-            boolean rateLimited = code == 429 || "0".equals(reply.headers().getFirst("x-ratelimit-remaining"));
-            String message = rateLimited
-                    ? "GitHub's rate limit is reached; Dockline will work again when it resets."
-                    : "GitHub refused access (HTTP 403).";
             return logOnChange(previous, LogLevel.WARN, code, request, reply.body(), null,
-                    new SourceStatus(Source.GITHUB, ConnectionState.LIMITED, message));
+                    isRateLimit(reply) ? rateLimited() : refused(code));
         }
-        return logOnChange(previous, LogLevel.WARN, code, request, reply.body(), null,
-                new SourceStatus(Source.GITHUB, ConnectionState.LIMITED,
-                        "GitHub answered with an error (HTTP " + code + "). Try again later."));
+        return logOnChange(previous, LogLevel.WARN, code, request, reply.body(), null, failing(code));
     }
 
     private SourceStatus logOnChange(SourceStatus previous, LogLevel level, Integer code, String request,
