@@ -259,6 +259,24 @@ public final class HostingerStubs {
         hostinger.stubFor(get(urlPathEqualTo(DOMAINS_PATH)).willReturn(okJson("[" + String.join(",", domains) + "]")));
     }
 
+    /** {@code domain} as it appears in the address, i.e. already URL-encoded if it needs to be. */
+    public static String domainRenewalPath(String domain) {
+        return DOMAINS_PATH + "/" + domain + "/renewal";
+    }
+
+    /** The domain's renewal information ({@code GET /api/domains/v1/portfolio/{domain}/renewal}) with this expiry date. */
+    public static void domainRenewal(WireMockServer hostinger, String domain, String expiresAt) {
+        hostinger.stubFor(get(urlPathEqualTo(domainRenewalPath(domain))).willReturn(okJson("""
+                {"domain":"%s","status":"active","expires_at":"%s","is_grace_period":false,\
+                "grace_period_ends_at":null,"is_redemption_period":false,"redemption_period_ends_at":null,\
+                "is_renewable":true}""".formatted(domain, expiresAt))));
+    }
+
+    public static void domainRenewalServerError(WireMockServer hostinger, String domain) {
+        hostinger.stubFor(get(urlPathEqualTo(domainRenewalPath(domain))).willReturn(error(500, """
+                {"message":"Server Error","correlation_id":"c0ffee00-0000-4000-8000-000000000024"}""")));
+    }
+
     /** The domain portfolio answers 401; {@code echo} is put into the body to check that it gets masked. */
     public static void domainsUnauthorized(WireMockServer hostinger, String echo) {
         hostinger.stubFor(get(urlPathEqualTo(DOMAINS_PATH)).willReturn(error(401, """
