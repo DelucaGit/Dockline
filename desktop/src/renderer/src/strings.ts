@@ -2,6 +2,16 @@
 export const strings = {
   appName: 'Dockline',
   sidebarLabel: 'Main menu',
+  backend: {
+    loadingTitle: 'Starting Dockline…',
+    loadingHint: 'The backend is starting. This can take a few seconds.',
+    errorTitle: 'The backend could not be started',
+    unreachable: 'The app could not ask the backend for its state.',
+    retry: 'Retry',
+    checking: 'Checking backend…',
+    connected: 'Backend connected',
+    disconnected: 'Backend not responding'
+  },
   nav: {
     overview: 'Overview',
     sites: 'Sites',
