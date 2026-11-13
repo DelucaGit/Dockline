@@ -212,6 +212,33 @@ export async function stubSitesRateLimited(
   });
 }
 
+/**
+ * The website list answers 429 with Retry-After ONCE, then the other website stubs (e.g. `stubSites`) answer
+ * again: Hostinger saying "slow down" and then recovering. A WireMock scenario; `wiremock.reset()` starts it over.
+ * With a short wait (at most 10 s) the backend waits inside the request and retries; with a longer one it
+ * answers 429 HOSTINGER_RATE_LIMITED at once with `retryAfterSeconds`, and GET /api/status counts down.
+ */
+export async function stubSitesRateLimitedOnce(
+  wiremock: WireMock,
+  retryAfterSeconds = 2,
+): Promise<void> {
+  await wiremock.stubFor({
+    priority: 1,
+    scenarioName: "websites-rate-limited-once",
+    requiredScenarioState: "Started",
+    newScenarioState: "recovered",
+    request: { method: "GET", urlPath: WEBSITES_PATH },
+    response: {
+      status: 429,
+      headers: { "Retry-After": String(retryAfterSeconds) },
+      jsonBody: {
+        message: "Too Many Attempts.",
+        correlation_id: "c0ffee00-0000-4000-8000-000000000014",
+      },
+    },
+  });
+}
+
 export async function stubSitesServerError(wiremock: WireMock): Promise<void> {
   await wiremock.stubFor({
     request: { method: "GET", urlPath: WEBSITES_PATH },

@@ -5,6 +5,7 @@ import {
   hostingerEnv,
   stubSites,
   stubSitesRateLimited,
+  stubSitesRateLimitedOnce,
   stubSitesServerError,
   stubSitesUnauthorized,
   stubSubscriptionsOk,
@@ -129,14 +130,6 @@ test("the renderer can list (fake) Hostinger websites and gets a clear problem f
     }),
   ]);
 
-  await stubSitesRateLimited(wiremock, 60);
-  const limited = await call("/api/hostinger/sites?refresh=true");
-  expect(limited.status).toBe(429);
-  expect(limited.retryAfter).toBe("60");
-  expect(JSON.parse(limited.body)).toMatchObject({
-    code: "HOSTINGER_RATE_LIMITED",
-  });
-
   await stubSitesServerError(wiremock);
   const failing = await call("/api/hostinger/sites?refresh=true");
   expect(failing.status).toBe(502);
@@ -156,12 +149,36 @@ test("the renderer can list (fake) Hostinger websites and gets a clear problem f
     state: "ERROR",
   });
 
+  // Hostinger says "slow down" once with a short Retry-After: the backend waits (1 s) and retries.
+  await stubSites(wiremock, [{ domain: "shop.example" }]);
+  await stubSitesRateLimitedOnce(wiremock, 1);
+  const retried = await call("/api/hostinger/sites?refresh=true");
+  expect(retried.status).toBe(200);
+  expect(JSON.parse(retried.body)).toMatchObject({
+    sites: [expect.objectContaining({ domain: "shop.example" })],
+  });
+
+  // A long Retry-After is answered at once (no hanging request) with a countdown; last, because no
+  // Hostinger request is sent for the next 60 s.
+  await stubSitesRateLimited(wiremock, 60);
+  const limited = await call("/api/hostinger/sites?refresh=true");
+  expect(limited.status).toBe(429);
+  expect(limited.retryAfter).toBe("60");
+  expect(JSON.parse(limited.body)).toMatchObject({
+    code: "HOSTINGER_RATE_LIMITED",
+    retryAfterSeconds: 60,
+  });
+  const limitedStatus = JSON.parse((await call("/api/status")).body).sources[1];
+  expect(limitedStatus).toMatchObject({ source: "HOSTINGER", state: "LIMITED" });
+  expect(limitedStatus.retryAfterSeconds).toBeGreaterThan(0);
+  expect(limitedStatus.retryAfterSeconds).toBeLessThanOrEqual(60);
+
   const log = await call("/api/log?source=HOSTINGER");
   expect(
     (JSON.parse(log.body) as { action: string }[]).filter(
       (e) => e.action === "GET /api/hosting/v1/websites",
     ),
-  ).toHaveLength(3);
+  ).toHaveLength(4);
 
   for (const text of seen) {
     expect(text).not.toContain(FAKE_HOSTINGER.token);
