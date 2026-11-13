@@ -28,6 +28,24 @@ export const strings = {
     log: { title: 'Log', empty: 'Nothing here yet.' },
     settings: { title: 'Settings', empty: 'Nothing here yet.' }
   },
+  view: {
+    refresh: 'Refresh',
+    lastUpdated: 'Last updated',
+    loading: 'Loading…',
+    retry: 'Try again'
+  },
+  repos: {
+    title: 'Repos',
+    empty: 'No repositories',
+    private: 'Private',
+    public: 'Public',
+    fork: 'Fork',
+    archived: 'Archived',
+    noPushes: 'No pushes yet',
+    openOnGithub: 'Open on GitHub',
+    truncated: 'Showing the first 5,000 repositories; more exist on GitHub.',
+    loadError: 'Could not load your repositories.'
+  },
   connections: {
     heading: 'Connections',
     github: 'GitHub',
