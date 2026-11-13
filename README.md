@@ -186,6 +186,8 @@ Both rules use the `Clock` bean, and waiting goes through the `Waiter` bean (`Th
 
 **Sites view (desktop).** Lists every Hostinger website (domain, type, "Suspended" when disabled) with "Refresh" and "Last updated". Opening the view reuses the backend's 60-second copy; "Refresh" and "Try again" send `?refresh=true`. States: not connected (button to Settings), rejected token ("Replace token"), a readable error with "Try again", and on `HOSTINGER_RATE_LIMITED` "Rate limited, retrying in X s", counting down and asking again by itself (the Hostinger dot is yellow meanwhile). Tests: `SitesPage.test.tsx` and `e2e/sites-view.spec.ts`.
 
+**Domains view (desktop).** Lists every Hostinger domain (name and expiry date), earliest expiry first; a domain without a name shows "(no name)", one without a date "No expiry date". A domain that expires within 30 days gets an amber "Expiring soon" label, one whose date has passed (or that Hostinger marks `expired`) a red "Expired" label; both have their own shades for light and dark theme. "Refresh", "Last updated" and the not-connected, "Replace token" and "Rate limited, retrying in X s" states work like in the Sites view. Unlike Sites, when a request fails the last known domains stay visible below the error message. Tests: `DomainsPage.test.tsx` and `e2e/domains-view.spec.ts`.
+
 **Hostinger's "too many requests" (429).** If Hostinger still answers `429`, `HostingerClient` handles it for every feature:
 
 - The wait is Hostinger's `Retry-After` header (seconds, or an HTTP date), kept between 1 and 120 seconds. A missing or unreadable header means `dockline.hostinger.default-retry-after` (default `30s`; env `DOCKLINE_HOSTINGER_DEFAULT_RETRY_AFTER`).

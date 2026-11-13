@@ -45,3 +45,15 @@ export async function fetchSites(baseUrl: string, refresh = false): Promise<Host
   if (res.ok) return (await res.json()) as HostingerSites
   throw await problemFromResponse(res)
 }
+
+export type HostingerDomains = components['schemas']['HostingerDomains']
+export type HostingerDomain = components['schemas']['HostingerDomain']
+
+export const domainsKey = (baseUrl: string) => ['hostinger-domains', baseUrl] as const
+
+/** `refresh` skips the backend's 60-second copy and asks Hostinger again (Refresh button); opening the view reuses it. */
+export async function fetchDomains(baseUrl: string, refresh = false): Promise<HostingerDomains> {
+  const res = await fetch(`${baseUrl}/api/hostinger/domains${refresh ? '?refresh=true' : ''}`)
+  if (res.ok) return (await res.json()) as HostingerDomains
+  throw await problemFromResponse(res)
+}

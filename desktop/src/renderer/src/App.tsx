@@ -6,6 +6,7 @@ import { routes } from '@/routes'
 import { LogPage } from '@/pages/LogPage'
 import { Placeholder } from '@/pages/Placeholder'
 import { ReposPage } from '@/pages/ReposPage'
+import { DomainsPage } from '@/pages/DomainsPage'
 import { SitesPage } from '@/pages/SitesPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { Connections } from '@/components/Connections'
@@ -14,6 +15,7 @@ function pageElement(path: string, page: { title: string; empty: string }, baseU
   if (baseUrl && path === '/log') return <LogPage baseUrl={baseUrl} />
   if (baseUrl && path === '/repos') return <ReposPage baseUrl={baseUrl} />
   if (baseUrl && path === '/sites') return <SitesPage baseUrl={baseUrl} />
+  if (baseUrl && path === '/domains') return <DomainsPage baseUrl={baseUrl} />
   if (baseUrl && path === '/settings') return <SettingsPage baseUrl={baseUrl} />
   return <Placeholder {...page} />
 }

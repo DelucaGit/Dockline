@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { statusKey } from '@/api/github'
 import { fetchSites, sitesKey, type HostingerSite } from '@/api/hostinger'
+import { RateLimited } from '@/components/RateLimited'
 import { ViewHeader } from '@/components/ViewHeader'
 import { CARD, ViewEmpty, ViewError, ViewLoading } from '@/components/ViewState'
 import { Button } from '@/components/ui/button'
@@ -21,31 +22,6 @@ function SiteRow({ site }: { site: HostingerSite }) {
         <span className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">{t.suspended}</span>
       )}
     </li>
-  )
-}
-
-/** "Rate limited, retrying in X s": counts down locally and asks again when it reaches 0. */
-function RateLimited({ seconds, onElapsed }: { seconds: number; onElapsed: () => void }) {
-  const [left, setLeft] = useState(seconds)
-  const elapsed = useRef(onElapsed)
-  elapsed.current = onElapsed
-  useEffect(() => {
-    setLeft(seconds)
-    const started = Date.now()
-    const timer = setInterval(() => {
-      const remaining = Math.max(0, seconds - Math.floor((Date.now() - started) / 1000))
-      setLeft(remaining)
-      if (remaining === 0) {
-        clearInterval(timer)
-        elapsed.current()
-      }
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [seconds])
-  return (
-    <p role="status" className="mt-8 text-center text-lg font-medium">
-      {strings.sites.rateLimitedRetry.replace('{seconds}', String(left))}
-    </p>
   )
 }
 
@@ -75,7 +51,7 @@ function SitesProblem({ problem, onRetry }: { problem: ProblemState; onRetry: ()
     )
   }
   if (problem.kind === 'RATE_LIMITED' && problem.retryAfterSeconds) {
-    return <RateLimited seconds={problem.retryAfterSeconds} onElapsed={onRetry} />
+    return <RateLimited message={t.rateLimitedRetry} seconds={problem.retryAfterSeconds} onElapsed={onRetry} />
   }
   const title = problem.kind === 'RATE_LIMITED' ? t.rateLimited : t.loadError
   return <ViewError title={title} message={problem.detail ?? t.loadErrorHint} onRetry={onRetry} />
