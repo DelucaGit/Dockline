@@ -62,10 +62,11 @@ export function SitesPage({ baseUrl }: { baseUrl: string }) {
   const forceRefresh = useRef(false)
   const sites = useQuery({
     queryKey: sitesKey(baseUrl),
-    queryFn: () => {
-      const refresh = forceRefresh.current
+    queryFn: async () => {
+      // Cleared only after success, so react-query's automatic retries of a failed Refresh also skip the backend copy.
+      const answer = await fetchSites(baseUrl, forceRefresh.current)
       forceRefresh.current = false
-      return fetchSites(baseUrl, refresh)
+      return answer
     },
     refetchOnWindowFocus: false,
     refetchOnMount: 'always',

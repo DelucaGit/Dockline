@@ -52,8 +52,8 @@ function Where() {
   return <p data-testid="where">{loc.pathname + (loc.state ? JSON.stringify(loc.state) : '')}</p>
 }
 
-function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderPage(retry: number | false = false) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry, retryDelay: 0 } } })
   render(
     <MemoryRouter initialEntries={['/sites']}>
       <QueryClientProvider client={client}>
@@ -123,6 +123,24 @@ describe('SitesPage', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('a.com')).toBeInTheDocument()
     expect(fake.urls[1]).toContain('refresh=true')
+  })
+
+  it('an automatic retry of a failed Refresh still asks Hostinger again (refresh=true)', async () => {
+    const user = userEvent.setup()
+    const fake = setup(
+      list([site('a.com')]),
+      problem(502, 'HOSTINGER_UNAVAILABLE', 'down'),
+      list([site('a.com'), site('b.com')])
+    )
+    renderPage(1)
+    await screen.findByText('a.com')
+    await user.click(screen.getByRole('button', { name: 'Refresh' }))
+    expect(await screen.findByText('b.com')).toBeInTheDocument()
+    expect(fake.urls).toEqual([
+      `${BASE_URL}/api/hostinger/sites`,
+      `${BASE_URL}/api/hostinger/sites?refresh=true`,
+      `${BASE_URL}/api/hostinger/sites?refresh=true`
+    ])
   })
 
   it('while rate limited it counts down, then asks again and shows the list', async () => {
