@@ -124,7 +124,22 @@ GitHub uses the **device flow**: the app shows a short code, the user enters it 
 
 `GET /api/status` checks the saved GitHub token with `GET /user` at most once a minute (connect, disconnect and recheck skip the wait): `200` = `CONNECTED` ("Connected as LOGIN"), `401` = `ERROR` (revoked or expired, reconnect; also written to the Log section), `403`/`429` (rate limit) = `LIMITED`, and GitHub unreachable or failing = `LIMITED` (the token may be fine, so the app does not ask to reconnect). Time-dependent code uses a `Clock` bean that tests replace with `MutableClock`.
 
-**Fake GitHub in tests.** Backend tests use `GithubStubs` (backend test sources) and end-to-end tests `desktop/e2e/support/githubStubs.ts` (`githubEnv`, `stubDeviceCode`, `stubTokenPending`, `stubTokenSlowDown`, `stubTokenDenied`, `stubTokenExpired`, `stubTokenSuccess`, `stubTokenError`, `stubUser`, `stubUserUnauthorized`, `stubUserRateLimited`), both on WireMock.
+**Fake GitHub in tests.** Backend tests use `GithubStubs` (backend test sources) and end-to-end tests `desktop/e2e/support/githubStubs.ts` (`githubEnv`, `stubDeviceCode`, `stubTokenPending`, `stubTokenSlowDown`, `stubTokenDenied`, `stubTokenExpired`, `stubTokenSuccess`, `stubTokenError`, `stubUser`, `stubUserUnauthorized`, `stubUserRateLimited`, and for repositories `stubRepos(wiremock, repos, { pages })`, `stubReposUnauthorized`, `stubReposRateLimited`, `stubReposServerError`), both on WireMock.
+
+### GitHub repositories
+
+`GET /api/github/repositories` answers `{repositories: [{name, fullName, visibility, lastPushAt, htmlUrl, fork, archived}], fetchedAt, truncated}`: `visibility` is `PRIVATE` or `PUBLIC`, `lastPushAt` is ISO-8601 or `null` (never pushed), the list is most recently pushed first, and `fetchedAt` is when the backend asked GitHub. It calls GitHub's `GET /user/repos` (everything the user owns, collaborates on or sees through an organization, 100 per page) and follows every `rel="next"` page link, but only links on the configured GitHub API address, so the token is never sent anywhere else; it stops after 50 pages (5,000 repositories) and then sets `truncated: true`. Nothing is cached: every call (and so every "Refresh") asks GitHub again.
+
+Errors are `application/problem+json` with a stable `code` property for the UI and a readable `detail`:
+
+| Status | `code` | When |
+|---|---|---|
+| `409` | `GITHUB_NOT_CONNECTED` | No GitHub token saved; GitHub is not called |
+| `409` | `GITHUB_TOKEN_REJECTED` | GitHub answered `401` (revoked or expired): reconnect |
+| `429` | `GITHUB_RATE_LIMITED` | GitHub's rate limit (`429`, or `403` with `x-ratelimit-remaining: 0` or `Retry-After`); `Retry-After` header in seconds when known |
+| `502` | `GITHUB_UNAVAILABLE` | GitHub unreachable, timed out, `5xx`/other errors, an unreadable answer or a next-page link to another host |
+
+Every GitHub failure is written to the Log section (action `GET /user/repos`, masked request and response) and updates the GitHub status at once (`ERROR` for a rejected token, `LIMITED` otherwise), without waiting for the 60-second status cache. Other data endpoints can report problems the same way by throwing `ApiProblem`.
 
 **Connections UI (desktop).** Settings has a GitHub section: "Connect to GitHub" shows the short code (with "Copy code"), opens GitHub's page in the default browser and shows the address as a link in case the browser did not open, then polls `POST /api/github/connect/poll` (at the interval the backend returns, at least every second) until it says `CONNECTED`. Denied, expired or failed attempts show the backend's message and "Try again"; a missing client ID shows the readable `400` message. "Disconnect" asks for confirmation first. At the bottom of the sidebar, a Connections block shows a dot for GitHub and Hostinger from `GET /api/status` (green = connected, yellow = limited, red = error or not connected; each has a text such as "GitHub: not connected" for screen readers and as tooltip; a click opens Settings). It refreshes every 30 seconds, when the window gets focus again, and after connect or disconnect. Opening the browser goes through `window.dockline.openExternal(url)`, which the main process only allows for `https:` addresses; with `DOCKLINE_E2E_NO_BROWSER=1` (set by the end-to-end test fixture) it records the address in `globalThis.__docklineOpenedUrls` instead of opening a browser. The end-to-end tests keep their tokens in memory, so "the connection survives a restart" is not covered there; it depends on Credential Manager.
 

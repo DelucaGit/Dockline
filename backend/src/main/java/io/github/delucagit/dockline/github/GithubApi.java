@@ -1,8 +1,10 @@
 package io.github.delucagit.dockline.github;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.Instant;
+import java.util.List;
 
-/** The request and response shapes of the GitHub connection endpoints. */
+/** The request and response shapes of the GitHub endpoints. */
 final class GithubApi {
 
     private GithubApi() {}
@@ -47,4 +49,32 @@ final class GithubApi {
             return new ConnectProgress(state, null, message);
         }
     }
+
+    @Schema(name = "GithubVisibility", enumAsRef = true, description = "PRIVATE: only people with access see it. PUBLIC: anyone can.")
+    enum Visibility {
+        PRIVATE,
+        PUBLIC
+    }
+
+    @Schema(name = "GithubRepository", description = "One repository the user owns, collaborates on or sees through an organization")
+    record Repository(
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "dockline") String name,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "octocat/dockline",
+                    description = "owner/name") String fullName,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Visibility visibility,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, example = "2026-11-12T08:15:30Z",
+                    description = "Last push (ISO-8601, UTC); null for a repository nobody has pushed to") Instant lastPushAt,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "https://github.com/octocat/dockline",
+                    description = "The repository's page on GitHub") String htmlUrl,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "A fork of another repository") boolean fork,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Archived (read-only) on GitHub") boolean archived) {}
+
+    @Schema(name = "GithubRepositories", description = "The user's repositories, fetched from GitHub just now")
+    record Repositories(
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
+                    description = "Most recently pushed first; never-pushed ones last") List<Repository> repositories,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "2026-11-13T09:00:00Z",
+                    description = "When Dockline fetched this from GitHub (ISO-8601, UTC)") Instant fetchedAt,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "True when the list stopped at "
+                    + GithubRepositoryList.MAX_PAGES + " pages of 100 and more repositories exist") boolean truncated) {}
 }

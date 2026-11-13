@@ -2,6 +2,7 @@ package io.github.delucagit.dockline.github;
 
 import io.github.delucagit.dockline.github.GithubApi.ConnectProgress;
 import io.github.delucagit.dockline.github.GithubApi.DeviceCode;
+import io.github.delucagit.dockline.github.GithubApi.Repositories;
 import io.github.delucagit.dockline.status.SourceStatus;
 import io.github.delucagit.dockline.token.Source;
 import io.github.delucagit.dockline.token.TokenStore;
@@ -14,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -29,17 +31,39 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/github")
-@Tag(name = "GitHub", description = "Connect to GitHub (device flow), check and disconnect")
+@Tag(name = "GitHub", description = "Connect to GitHub (device flow), check and disconnect; list repositories")
 class GithubController {
 
     private final GithubDeviceFlow deviceFlow;
     private final GithubStatusProvider status;
     private final TokenStore tokenStore;
+    private final GithubRepositoryList repositoryList;
 
-    GithubController(GithubDeviceFlow deviceFlow, GithubStatusProvider status, TokenStore tokenStore) {
+    GithubController(GithubDeviceFlow deviceFlow, GithubStatusProvider status, TokenStore tokenStore,
+            GithubRepositoryList repositoryList) {
         this.deviceFlow = deviceFlow;
         this.status = status;
         this.tokenStore = tokenStore;
+        this.repositoryList = repositoryList;
+    }
+
+    @GetMapping(path = "/repositories", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(operationId = "listGithubRepositories", summary = "The user's repositories, fetched from GitHub now",
+            description = "Every call asks GitHub (no cache) and follows all pages. Errors are problem responses with a "
+                    + "stable `code` property: GITHUB_NOT_CONNECTED (409), GITHUB_TOKEN_REJECTED (409, reconnect), "
+                    + "GITHUB_RATE_LIMITED (429, Retry-After header when known) and GITHUB_UNAVAILABLE (502). GitHub "
+                    + "failures are written to the Log section and update GITHUB in GET /api/status at once.")
+    @ApiResponse(responseCode = "200", description = "All repositories, most recently pushed first")
+    @ApiResponse(responseCode = "409", description = "code GITHUB_NOT_CONNECTED: no GitHub token saved; "
+            + "code GITHUB_TOKEN_REJECTED: GitHub rejected the saved token (revoked or expired), reconnect",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "429", description = "code GITHUB_RATE_LIMITED: GitHub's rate limit is reached",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "502", description = "code GITHUB_UNAVAILABLE: GitHub could not be reached, timed out, "
+            + "failed or answered unexpectedly",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    Repositories repositories() {
+        return repositoryList.list();
     }
 
     @PostMapping(path = "/connect", produces = MediaType.APPLICATION_JSON_VALUE)

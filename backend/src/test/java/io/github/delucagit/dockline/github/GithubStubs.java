@@ -1,13 +1,17 @@
 package io.github.delucagit.dockline.github;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.absent;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import java.util.List;
 
 /**
  * A fake GitHub for backend tests: the device-flow endpoints (github.com/login/...) and {@code GET /user}
@@ -15,13 +19,17 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
  * errors with HTTP 200 and an {@code error} field, so the fakes do too.
  *
  * <p>The same fakes exist for the desktop E2E tests in {@code desktop/e2e/support/githubStubs.ts}.
- * A later stub for the same endpoint wins, so a test can change GitHub's answer between two polls.
+ * For {@code GET /user/repos}, {@link #repos} serves several pages linked with absolute {@code Link} headers,
+ * as GitHub does; build the items with {@link #repo}.
+ *
+ * <p>A later stub for the same endpoint wins, so a test can change GitHub's answer between two polls.
  */
 public final class GithubStubs {
 
     public static final String DEVICE_CODE_PATH = "/login/device/code";
     public static final String TOKEN_PATH = "/login/oauth/access_token";
     public static final String USER_PATH = "/user";
+    public static final String REPOS_PATH = "/user/repos";
 
     private GithubStubs() {}
 
@@ -89,5 +97,80 @@ public final class GithubStubs {
                 .withHeader("x-ratelimit-reset", "1767272400")
                 .withBody("""
                         {"message":"API rate limit exceeded","documentation_url":"https://docs.github.com/rest"}""")));
+    }
+
+    /** One item of GitHub's repository list (only the fields Dockline reads, plus a few). {@code pushedAt} may be null. */
+    public static String repo(String owner, String name, boolean isPrivate, String pushedAt) {
+        return """
+                {"id":%d,"name":"%s","full_name":"%s/%s","private":%s,"html_url":"https://github.com/%s/%s",\
+                "description":null,"fork":false,"archived":false,"visibility":"%s","pushed_at":%s,\
+                "owner":{"login":"%s"}}""".formatted(Math.abs((owner + name).hashCode()), name, owner, name, isPrivate,
+                owner, name, isPrivate ? "private" : "public", pushedAt == null ? "null" : "\"" + pushedAt + "\"", owner);
+    }
+
+    /**
+     * {@code GET /user/repos} answering with these pages (each a list of {@link #repo} items). Every page but the
+     * last has a {@code Link} header with absolute {@code next} and {@code last} addresses on this server.
+     */
+    public static void repos(WireMockServer github, List<List<String>> pages) {
+        for (int i = 0; i < pages.size(); i++) {
+            int page = i + 1;
+            ResponseDefinitionBuilder response = okJson("[" + String.join(",", pages.get(i)) + "]");
+            if (page < pages.size()) {
+                response = response.withHeader("Link", "<%s>; rel=\"next\", <%s>; rel=\"last\"".formatted(
+                        reposPageUrl(github, page + 1), reposPageUrl(github, pages.size())));
+            }
+            github.stubFor(get(urlPathEqualTo(REPOS_PATH))
+                    .withQueryParam("page", page == 1 ? absent() : equalTo(Integer.toString(page)))
+                    .willReturn(response));
+        }
+    }
+
+    /** The address GitHub puts into a Link header for that page. */
+    public static String reposPageUrl(WireMockServer github, int page) {
+        return github.baseUrl() + REPOS_PATH + "?visibility=all&affiliation=owner%2Ccollaborator%2Corganization_member"
+                + "&sort=pushed&direction=desc&per_page=100&page=" + page;
+    }
+
+    /** One page of repositories whose next link points at another host (a token must never be sent there). */
+    public static void reposWithForeignNextLink(WireMockServer github, String foreignUrl, List<String> items) {
+        github.stubFor(get(urlPathEqualTo(REPOS_PATH)).willReturn(okJson("[" + String.join(",", items) + "]")
+                .withHeader("Link", "<" + foreignUrl + ">; rel=\"next\"")));
+    }
+
+    /** The token was revoked or has expired. */
+    public static void reposUnauthorized(WireMockServer github) {
+        github.stubFor(get(urlPathEqualTo(REPOS_PATH)).willReturn(aResponse().withStatus(401)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"message":"Bad credentials","documentation_url":"https://docs.github.com/rest","status":"401"}""")));
+    }
+
+    /** The primary rate limit is used up: 403, x-ratelimit-remaining 0, resets at {@code resetEpochSeconds}. */
+    public static void reposRateLimited(WireMockServer github, long resetEpochSeconds) {
+        github.stubFor(get(urlPathEqualTo(REPOS_PATH)).willReturn(aResponse().withStatus(403)
+                .withHeader("Content-Type", "application/json")
+                .withHeader("x-ratelimit-limit", "5000")
+                .withHeader("x-ratelimit-remaining", "0")
+                .withHeader("x-ratelimit-reset", Long.toString(resetEpochSeconds))
+                .withBody("""
+                        {"message":"API rate limit exceeded","documentation_url":"https://docs.github.com/rest"}""")));
+    }
+
+    /** A secondary rate limit: 429 with Retry-After. */
+    public static void reposTooManyRequests(WireMockServer github, int retryAfterSeconds) {
+        github.stubFor(get(urlPathEqualTo(REPOS_PATH)).willReturn(aResponse().withStatus(429)
+                .withHeader("Content-Type", "application/json")
+                .withHeader("Retry-After", Integer.toString(retryAfterSeconds))
+                .withBody("""
+                        {"message":"You have exceeded a secondary rate limit.","documentation_url":"https://docs.github.com/rest"}""")));
+    }
+
+    /** GitHub itself fails. */
+    public static void reposServerError(WireMockServer github) {
+        github.stubFor(get(urlPathEqualTo(REPOS_PATH)).willReturn(aResponse().withStatus(503)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"message":"Service Unavailable"}""")));
     }
 }
