@@ -31,6 +31,23 @@ export function resolveJar(appPath: string, env: NodeJS.ProcessEnv = process.env
   return jar ? join(targetDir, jar) : null
 }
 
+/**
+ * How the backend child process is started. The whole environment is passed on, so the backend
+ * sees e.g. DOCKLINE_GITHUB_API_URL / DOCKLINE_HOSTINGER_API_URL (tests point those at WireMock).
+ */
+export function backendCommand(
+  java: string,
+  jar: string,
+  port: number,
+  env: NodeJS.ProcessEnv = process.env
+): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
+  return {
+    command: java,
+    args: ['-jar', jar, `--server.port=${port}`, '--server.address=127.0.0.1'],
+    env: { ...env }
+  }
+}
+
 export function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer()
@@ -108,7 +125,9 @@ export class BackendProcess {
       if (tail.length > LOG_TAIL_LINES) tail.splice(0, tail.length - LOG_TAIL_LINES)
     }
 
-    const child = spawn(java, ['-jar', jar, `--server.port=${port}`, '--server.address=127.0.0.1'], {
+    const cmd = backendCommand(java, jar, port)
+    const child = spawn(cmd.command, cmd.args, {
+      env: cmd.env,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     })

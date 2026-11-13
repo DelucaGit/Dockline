@@ -12,5 +12,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./src/renderer/src/*"] }
   },
-  "include": ["src", "*.config.ts"]
+  "include": ["src", "e2e", "*.config.ts"]
 }

@@ -1,0 +1,16 @@
+# Dependencies and build output
+node_modules/
+out/
+dist/
+target/
+
+# Test results (Playwright)
+test-results/
+playwright-report/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
