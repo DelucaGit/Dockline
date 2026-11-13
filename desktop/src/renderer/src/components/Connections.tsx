@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { recheckHostinger } from '@/api/hostinger'
 import { fetchStatus, recheckGithub, statusKey, type ConnectionState } from '@/api/github'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { strings } from '@/strings'
 
@@ -60,30 +61,34 @@ export function Connections({ baseUrl }: { baseUrl: string }) {
               aria-label={`${label}: ${text}`}
               data-testid={`connection-${source.toLowerCase()}`}
               data-state={state}
-              className={cn('flex items-center gap-2 rounded-md px-3 py-1.5 text-sm flex-1 hover:bg-accent')}
+              className={cn('flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent')}
             >
               <span aria-hidden className={cn('size-2.5 shrink-0 rounded-full', DOT[state])} />
               <span>{label}</span>
             </NavLink>
           {source === 'GITHUB' && state === 'ERROR' && (
-            <button
+            <Button
               type="button"
-              className="mr-2 rounded-md px-2 py-1 text-xs font-medium underline hover:bg-accent"
+              variant="outline"
+              size="xs"
+              className="mr-2"
               aria-label={strings.connections.reconnectLabel}
               onClick={() => navigate('/settings', { state: { reconnect: true } })}
             >
               {strings.connections.reconnect}
-            </button>
+            </Button>
           )}
           {source === 'HOSTINGER' && state === 'ERROR' && (
-            <button
+            <Button
               type="button"
-              className="mr-2 rounded-md px-2 py-1 text-xs font-medium underline hover:bg-accent"
+              variant="outline"
+              size="xs"
+              className="mr-2"
               aria-label={strings.connections.replaceTokenLabel}
               onClick={() => navigate('/settings', { state: { replaceToken: true } })}
             >
               {strings.connections.replaceToken}
-            </button>
+            </Button>
           )}
           </div>
         )

@@ -18,10 +18,10 @@ export function BackendStatus({ baseUrl }: { baseUrl: string }) {
       : strings.backend.disconnected
 
   return (
-    <div role="status" className="flex items-center gap-2 px-3 py-2 text-sm">
+    <div role="status" className="flex items-center gap-2 px-3 py-1.5 text-sm">
       <span
         aria-hidden
-        className={`size-2 rounded-full ${connected ? 'bg-green-500' : isPending ? 'bg-muted-foreground' : 'bg-red-500'}`}
+        className={`size-2.5 shrink-0 rounded-full ${connected ? 'bg-green-500' : isPending ? 'bg-muted-foreground' : 'bg-red-500'}`}
       />
       {text}
     </div>
