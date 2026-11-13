@@ -9,11 +9,13 @@ const DESKTOP_DIR = join(import.meta.dirname, '..', '..')
 /**
  * Nothing in an end-to-end test may reach the real GitHub or Hostinger: by default every external
  * API points at a closed local port. Tests that need an API pass a WireMock URL instead.
+ * Tokens are kept in memory, never in the real Windows Credential Manager.
  */
 const NO_REAL_APIS = {
   DOCKLINE_GITHUB_API_URL: 'http://127.0.0.1:9',
   DOCKLINE_GITHUB_OAUTH_URL: 'http://127.0.0.1:9',
-  DOCKLINE_HOSTINGER_API_URL: 'http://127.0.0.1:9'
+  DOCKLINE_HOSTINGER_API_URL: 'http://127.0.0.1:9',
+  DOCKLINE_TOKEN_STORE: 'memory'
 }
 
 export interface RunningApp {
