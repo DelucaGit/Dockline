@@ -16,10 +16,13 @@ export function problemState(error: unknown): ProblemState {
   const base = { detail: error.detail, retryAfterSeconds: error.retryAfterSeconds }
   switch (error.code) {
     case 'GITHUB_NOT_CONNECTED':
+    case 'HOSTINGER_NOT_CONNECTED':
       return { kind: 'NOT_CONNECTED', ...base }
     case 'GITHUB_TOKEN_REJECTED':
+    case 'HOSTINGER_TOKEN_REJECTED':
       return { kind: 'TOKEN_REJECTED', ...base }
     case 'GITHUB_RATE_LIMITED':
+    case 'HOSTINGER_RATE_LIMITED':
       return { kind: 'RATE_LIMITED', ...base }
     default:
       return { kind: 'OTHER', ...base }

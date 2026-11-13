@@ -178,6 +178,8 @@ Errors mirror the GitHub ones: `409` `HOSTINGER_NOT_CONNECTED` (no token; Hostin
 
 Both rules use the `Clock` bean, and waiting goes through the `Waiter` bean (`Thread.sleep` in the app). Tests use `MutableClock` and `ClockAdvancingWaiter`, which moves the clock instead of sleeping; `HostingerCapAndCacheApiTest` proves the cap, the cache, expiry, refresh, that errors and token checks are not cached, and that a token change clears the cache, by counting the calls WireMock receives.
 
+**Sites view (desktop).** Lists every Hostinger website (domain, type, "Suspended" when disabled) with "Refresh" and "Last updated". Opening the view reuses the backend's 60-second copy; "Refresh" and "Try again" send `?refresh=true`. States: not connected (button to Settings), rejected token ("Replace token"), a readable error with "Try again", and on `HOSTINGER_RATE_LIMITED` "Rate limited, retrying in X s", counting down and asking again by itself (the Hostinger dot is yellow meanwhile). Tests: `SitesPage.test.tsx` and `e2e/sites-view.spec.ts`.
+
 **Hostinger's "too many requests" (429).** If Hostinger still answers `429`, `HostingerClient` handles it for every feature:
 
 - The wait is Hostinger's `Retry-After` header (seconds, or an HTTP date), kept between 1 and 120 seconds. A missing or unreadable header means `dockline.hostinger.default-retry-after` (default `30s`; env `DOCKLINE_HOSTINGER_DEFAULT_RETRY_AFTER`).

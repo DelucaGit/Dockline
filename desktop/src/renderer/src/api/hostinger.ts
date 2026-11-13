@@ -1,4 +1,4 @@
-import { ApiProblem, type SourceStatus } from '@/api/github'
+import { ApiProblem, problemFromResponse, type SourceStatus } from '@/api/github'
 import type { components } from '@/api/schema'
 
 async function send(baseUrl: string, path: string, method: string, body?: unknown): Promise<Response> {
@@ -32,4 +32,16 @@ export async function removeHostingerToken(baseUrl: string): Promise<void> {
 /** Ask Hostinger about the saved token right now (the backend otherwise caches the answer for a minute). */
 export async function recheckHostinger(baseUrl: string): Promise<void> {
   await send(baseUrl, '/api/hostinger/recheck', 'POST')
+}
+
+export type HostingerSites = components['schemas']['HostingerSites']
+export type HostingerSite = components['schemas']['HostingerSite']
+
+export const sitesKey = (baseUrl: string) => ['hostinger-sites', baseUrl] as const
+
+/** `refresh` skips the backend's 60-second copy and asks Hostinger again (Refresh button); opening the view reuses it. */
+export async function fetchSites(baseUrl: string, refresh = false): Promise<HostingerSites> {
+  const res = await fetch(`${baseUrl}/api/hostinger/sites${refresh ? '?refresh=true' : ''}`)
+  if (res.ok) return (await res.json()) as HostingerSites
+  throw await problemFromResponse(res)
 }
