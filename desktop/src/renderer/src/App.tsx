@@ -5,6 +5,14 @@ import { strings } from '@/strings'
 import { routes } from '@/routes'
 import { LogPage } from '@/pages/LogPage'
 import { Placeholder } from '@/pages/Placeholder'
+import { SettingsPage } from '@/pages/SettingsPage'
+import { Connections } from '@/components/Connections'
+
+function pageElement(path: string, page: { title: string; empty: string }, baseUrl?: string) {
+  if (baseUrl && path === '/log') return <LogPage baseUrl={baseUrl} />
+  if (baseUrl && path === '/settings') return <SettingsPage baseUrl={baseUrl} />
+  return <Placeholder {...page} />
+}
 
 export function App({ footer, baseUrl }: { footer?: ReactNode; baseUrl?: string }) {
   return (
@@ -29,13 +37,16 @@ export function App({ footer, baseUrl }: { footer?: ReactNode; baseUrl?: string 
             {label}
           </NavLink>
         ))}
-        <div className="mt-auto">{footer}</div>
+        <div className="mt-auto">
+          {baseUrl && <Connections baseUrl={baseUrl} />}
+          {footer}
+        </div>
       </nav>
       <main className="flex-1 overflow-auto p-6">
         <Routes>
           <Route path="/" element={<Navigate to={routes[0].path} replace />} />
           {routes.map(({ path, page }) => (
-            <Route key={path} path={path} element={path === '/log' && baseUrl ? <LogPage baseUrl={baseUrl} /> : <Placeholder {...page} />} />
+            <Route key={path} path={path} element={pageElement(path, page, baseUrl)} />
           ))}
           <Route path="*" element={<Navigate to={routes[0].path} replace />} />
         </Routes>
