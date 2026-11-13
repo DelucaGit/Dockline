@@ -24,7 +24,8 @@ import tools.jackson.databind.ObjectMapper;
  * read and deleted through the app's {@link TokenStore}, and the effect is checked over real HTTP.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "dockline.test-endpoints=true")
+        // GitHub calls go nowhere (nothing listens on port 9), never to the real GitHub.
+        properties = {"dockline.test-endpoints=true", "dockline.github.api-url=http://127.0.0.1:9"})
 @ExtendWith(OutputCaptureExtension.class)
 class TokenStoreAndStatusApiTest {
 
@@ -69,17 +70,16 @@ class TokenStoreAndStatusApiTest {
     }
 
     @Test
-    void statusIsNotConnectedWithoutTokensAndConnectedOnceOneIsStored() throws Exception {
+    void withoutAStatusProviderTheStatusFollowsTheStoredToken() throws Exception {
+        // GitHub has its own status provider (checks the token with GitHub, see GithubConnectApiTest);
+        // Hostinger does not have one yet and uses the fallback.
         assertThat(states()).isEqualTo("GITHUB=NOT_CONNECTED,HOSTINGER=NOT_CONNECTED");
 
-        tokenStore.save(Source.GITHUB, "gho_statusTestToken0123456789");
-        assertThat(states()).isEqualTo("GITHUB=CONNECTED,HOSTINGER=NOT_CONNECTED");
-
         tokenStore.save(Source.HOSTINGER, "hostinger-status-test-token");
-        assertThat(states()).isEqualTo("GITHUB=CONNECTED,HOSTINGER=CONNECTED");
-
-        tokenStore.delete(Source.GITHUB);
         assertThat(states()).isEqualTo("GITHUB=NOT_CONNECTED,HOSTINGER=CONNECTED");
+
+        tokenStore.delete(Source.HOSTINGER);
+        assertThat(states()).isEqualTo("GITHUB=NOT_CONNECTED,HOSTINGER=NOT_CONNECTED");
     }
 
     @Test

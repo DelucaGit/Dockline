@@ -24,6 +24,8 @@
     <java-keyring.version>1.0.4</java-keyring.version>
     <!-- Port used only while the build starts the app to export the OpenAPI file -->
     <openapi.export.port>18089</openapi.export.port>
+    <!-- Fake GitHub/Hostinger APIs in backend tests (same version as the desktop E2E's npm wiremock jar) -->
+    <wiremock.version>3.13.2</wiremock.version>
   </properties>
 
   <dependencies>
@@ -49,6 +51,13 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-webmvc-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <!-- standalone = shaded, so its Jetty does not clash with the app's Tomcat -->
+      <groupId>org.wiremock</groupId>
+      <artifactId>wiremock-standalone</artifactId>
+      <version>${wiremock.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

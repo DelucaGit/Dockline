@@ -8,7 +8,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record SourceStatus(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Source source,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) ConnectionState state,
-        @Schema(description = "Why the state is what it is, for LIMITED and ERROR; never contains a token",
+        @Schema(description = "Why the state is what it is (always for LIMITED and ERROR; may be set otherwise, "
+                        + "e.g. 'Connected as octocat'); never contains a token",
                 nullable = true) String message) {
 
     public static SourceStatus of(Source source, ConnectionState state) {
