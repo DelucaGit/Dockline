@@ -1,3 +1,5 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page, test as base } from '@playwright/test'
 import { startWireMock, type WireMock } from './wiremock'
@@ -35,10 +37,12 @@ export const test = base.extend<Fixtures>({
       // Always run the built app, never a dev server.
       delete appEnv['ELECTRON_RENDERER_URL']
       delete appEnv['ELECTRON_RUN_AS_NODE']
+      // Backend log files go to a fresh temporary folder, never the real app-data folder.
+      const logDir = mkdtempSync(join(tmpdir(), 'dockline-e2e-logs-'))
       const app = await electron.launch({
         args: [DESKTOP_DIR],
         cwd: DESKTOP_DIR,
-        env: { ...appEnv, ...NO_REAL_APIS, ...env }
+        env: { ...appEnv, ...NO_REAL_APIS, DOCKLINE_LOG_DIR: logDir, ...env }
       })
       apps.push(app)
       return { app, window: await app.firstWindow() }
