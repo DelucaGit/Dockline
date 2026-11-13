@@ -27,8 +27,9 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Lists the user's Hostinger websites with {@code GET /api/hosting/v1/websites}, asking for page 1, 2, ... until
- * {@code meta.total} websites are read or a page comes back short (up to {@link #MAX_PAGES}). Nothing is cached
- * here; every call goes through {@link HostingerClient}, where the shared rate limit and cache will live. The
+ * {@code meta.total} websites are read or a page comes back short (up to {@link #MAX_PAGES}). Every page goes
+ * through {@link HostingerClient}, which applies the shared request cap and reuses a page fetched in the last
+ * 60 seconds (unless {@code refresh}); {@code fetchedAt} is when the oldest page was really fetched. The
  * page addresses are built from the configured base URL, never taken from Hostinger's answer.
  *
  * <p>Failures become an {@link ApiProblem} with a stable {@code code}; each one is written to the Log section
@@ -72,11 +73,11 @@ class HostingerSiteList {
         this.clock = clock;
     }
 
-    Sites list() {
+    Sites list(boolean refresh) {
         String token = tokenStore.read(Source.HOSTINGER).orElseThrow(() -> new ApiProblem(HttpStatus.CONFLICT,
                 NOT_CONNECTED, "Hostinger is not connected",
                 "Connect to Hostinger in Settings to see your websites."));
-        Instant fetchedAt = clock.instant();
+        Instant fetchedAt = null;
         List<Site> sites = new ArrayList<>();
         boolean truncated = false;
         for (int page = 1; ; page++) {
@@ -86,21 +87,24 @@ class HostingerSiteList {
                         + " pages of websites were fetched; the list is incomplete.", request(page), null, null);
                 break;
             }
-            HostingerClient.Reply reply = fetch(page, token);
+            HostingerClient.Reply reply = fetch(page, token, refresh);
             if (!reply.ok()) {
                 throw failed(reply, page, token);
+            }
+            if (fetchedAt == null || reply.fetchedAt().isBefore(fetchedAt)) {
+                fetchedAt = reply.fetchedAt();
             }
             if (!readPage(reply, page, token, sites)) {
                 break;
             }
         }
         sites.sort(BY_DOMAIN);
-        return new Sites(List.copyOf(sites), fetchedAt, truncated);
+        return new Sites(List.copyOf(sites), fetchedAt != null ? fetchedAt : clock.instant(), truncated);
     }
 
-    private HostingerClient.Reply fetch(int page, String token) {
+    private HostingerClient.Reply fetch(int page, String token, boolean refresh) {
         try {
-            return client.getWebsites(page, token);
+            return client.getWebsites(page, token, refresh);
         } catch (RestClientException e) {
             SourceStatus unreachable = HostingerStatusProvider.unreachable(e);
             status.observed(token, unreachable);

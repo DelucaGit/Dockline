@@ -5,6 +5,7 @@ import io.github.delucagit.dockline.status.SourceStatus;
 import io.github.delucagit.dockline.token.Source;
 import io.github.delucagit.dockline.token.TokenStore;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClientException;
@@ -52,8 +54,11 @@ class HostingerController {
     }
 
     @GetMapping(path = "/sites", produces = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(operationId = "listHostingerSites", summary = "The user's Hostinger websites, fetched from Hostinger now",
-            description = "Follows all pages of Hostinger's website list. Errors are problem responses with a stable "
+    @Operation(operationId = "listHostingerSites", summary = "The user's Hostinger websites (from Hostinger, or the copy saved in the last 60 s)",
+            description = "Follows all pages of Hostinger's website list. Hostinger's answers are kept in memory for "
+                    + "60 seconds and reused, so `fetchedAt` may be up to a minute old; `refresh=true` asks Hostinger "
+                    + "again. Dockline sends Hostinger at most 50 requests per minute across all features; a request "
+                    + "over that waits its turn (up to a minute, then HOSTINGER_UNAVAILABLE). Errors are problem responses with a stable "
                     + "`code` property: HOSTINGER_NOT_CONNECTED (409), HOSTINGER_TOKEN_REJECTED (409, replace the "
                     + "token), HOSTINGER_RATE_LIMITED (429, Retry-After header when Hostinger sends one) and "
                     + "HOSTINGER_UNAVAILABLE (502). Hostinger failures are written to the Log section and update "
@@ -67,8 +72,10 @@ class HostingerController {
     @ApiResponse(responseCode = "502", description = "code HOSTINGER_UNAVAILABLE: Hostinger could not be reached, "
             + "timed out, failed or answered unexpectedly",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    HostingerApi.Sites sites() {
-        return siteList.list();
+    HostingerApi.Sites sites(@Parameter(description = "True skips the copy saved in the last 60 seconds and "
+            + "asks Hostinger again (still counts towards the 50 requests per minute); the new answer is saved")
+            @RequestParam(defaultValue = "false") boolean refresh) {
+        return siteList.list(refresh);
     }
 
     /** The token the user pasted. */
@@ -125,6 +132,7 @@ class HostingerController {
                     + reply.status() + "), so the token was not saved. Try again later.");
         }
         tokenStore.save(Source.HOSTINGER, token);
+        client.clearCache();
         return status.connected(token);
     }
 
@@ -135,6 +143,7 @@ class HostingerController {
     @ApiResponse(responseCode = "204", description = "Removed")
     void delete() {
         tokenStore.delete(Source.HOSTINGER);
+        client.clearCache();
         status.invalidate();
     }
 

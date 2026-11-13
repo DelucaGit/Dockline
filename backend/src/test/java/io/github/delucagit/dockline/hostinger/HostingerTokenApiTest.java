@@ -6,6 +6,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import io.github.delucagit.dockline.ClockAdvancingWaiter;
 import io.github.delucagit.dockline.MutableClock;
 import io.github.delucagit.dockline.token.Source;
 import io.github.delucagit.dockline.token.TokenStore;
@@ -59,6 +60,12 @@ class HostingerTokenApiTest {
         MutableClock testClock() {
             return new MutableClock();
         }
+
+        @Bean
+        @Primary
+        ClockAdvancingWaiter testWaiter(MutableClock clock) {
+            return new ClockAdvancingWaiter(clock);
+        }
     }
 
     @Value("${local.server.port}")
@@ -74,6 +81,8 @@ class HostingerTokenApiTest {
 
     @BeforeEach
     void cleanStart() throws Exception {
+        // A minute later: the Hostinger request cap and saved answers from earlier tests are gone.
+        clock.advanceSeconds(61);
         HOSTINGER.resetAll();
         send("DELETE", "/api/hostinger/token", null);
         send("DELETE", "/api/log", null);

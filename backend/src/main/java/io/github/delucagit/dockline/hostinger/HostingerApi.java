@@ -30,12 +30,13 @@ final class HostingerApi {
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, example = "2024-01-15T10:30:00Z",
                     description = "When the website was created (ISO-8601, UTC)") Instant createdAt) {}
 
-    @Schema(name = "HostingerSites", description = "The user's Hostinger websites, fetched from Hostinger just now")
+    @Schema(name = "HostingerSites", description = "The user's Hostinger websites, as Hostinger listed them at fetchedAt")
     record Sites(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
                     description = "Sorted by domain (A-Z); websites without a domain last") List<Site> sites,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "2026-11-13T09:00:00Z",
-                    description = "When Dockline fetched this from Hostinger (ISO-8601, UTC)") Instant fetchedAt,
+                    description = "When Dockline fetched this from Hostinger (ISO-8601, UTC); up to 60 s old when "
+                            + "the saved copy was reused") Instant fetchedAt,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "True when the list stopped at "
                     + HostingerSiteList.MAX_PAGES + " pages of " + HostingerClient.WEBSITES_PER_PAGE
                     + " and more websites exist") boolean truncated) {}

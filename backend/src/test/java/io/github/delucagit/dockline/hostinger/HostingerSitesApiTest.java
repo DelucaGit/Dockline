@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
+import io.github.delucagit.dockline.ClockAdvancingWaiter;
 import io.github.delucagit.dockline.MutableClock;
 import io.github.delucagit.dockline.token.Source;
 import io.github.delucagit.dockline.token.TokenStore;
@@ -16,6 +17,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
@@ -63,6 +65,12 @@ class HostingerSitesApiTest {
         MutableClock testClock() {
             return new MutableClock();
         }
+
+        @Bean
+        @Primary
+        ClockAdvancingWaiter testWaiter(MutableClock clock) {
+            return new ClockAdvancingWaiter(clock);
+        }
     }
 
     @Value("${local.server.port}")
@@ -78,6 +86,8 @@ class HostingerSitesApiTest {
 
     @BeforeEach
     void cleanStart() throws Exception {
+        // A minute later: the Hostinger request cap and saved answers from earlier tests are gone.
+        clock.advanceSeconds(61);
         HOSTINGER.resetAll();
         send("DELETE", "/api/hostinger/token");
         send("DELETE", "/api/log");
@@ -143,16 +153,17 @@ class HostingerSitesApiTest {
     }
 
     @Test
-    void everyCallAsksHostingerAgainAndFetchedAtFollowsTheClock() throws Exception {
+    void aRefreshAsksHostingerAgainAndFetchedAtFollowsTheClock() throws Exception {
         tokenStore.save(Source.HOSTINGER, TOKEN);
         HostingerStubs.websites(HOSTINGER, List.of(
                 List.of(HostingerStubs.site("one.example", "u1", 1, true, "2024-01-15T10:30:00+00:00"))));
 
         send("GET", PATH);
         clock.advanceSeconds(5);
-        JsonNode second = JSON.readTree(send("GET", PATH).body());
+        Instant now = clock.instant();
+        JsonNode second = JSON.readTree(send("GET", PATH + "?refresh=true").body());
 
-        assertThat(second.get("fetchedAt").asString()).isEqualTo("2026-01-01T12:00:05Z");
+        assertThat(second.get("fetchedAt").asString()).isEqualTo(now.toString());
         assertThat(HOSTINGER.findAll(getRequestedFor(urlPathEqualTo(HostingerStubs.WEBSITES_PATH)))).hasSize(2);
     }
 
