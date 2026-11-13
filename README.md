@@ -93,6 +93,8 @@ The backend reads the base URLs of the external APIs from Spring properties. The
 | `GET /api/log?source=GITHUB\|HOSTINGER\|BACKEND&level=WARN\|ERROR` | Recent warnings and errors, newest first (both filters optional) |
 | `DELETE /api/log` | Clears the list (`204`); the log files are kept |
 
+**Log section (desktop).** The Log page in the app lists these entries newest first, with filters for source and level (sent to the API as query parameters), Refresh (it also refreshes when the window regains focus), Clear, and expandable request / response / stack trace. "Copy for AI" on an entry puts a readable text block with app version, time, source, action, status code, message, request, response and stack trace on the clipboard; the text is run through a second, client-side token mask (`desktop/src/renderer/src/lib/maskTokens.ts`) on top of the backend's.
+
 Each entry: `id`, `time` (ISO-8601, UTC), `level`, `source`, `action`, `statusCode` (left out if none), `message`, and `context` with `appVersion`, `request`, `response`, `stackTrace` (each left out if none).
 
 **Test-only endpoints.** With `DOCKLINE_TEST_ENDPOINTS=true` (or `--dockline.test-endpoints=true`) the backend also offers `POST /api/test/report-error` (query parameters `level`, `source`, `action`, `statusCode`, `message`, all optional; every text includes a fake GitHub token, so tests can check masking) and `POST /api/test/fail` (throws an unexpected exception). They are **off by default**, so they do not exist in a normal run, and are never part of `openapi.json`. The end-to-end tests turn them on through the environment, which the desktop app passes on to the backend.
