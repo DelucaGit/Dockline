@@ -34,6 +34,9 @@ export const strings = {
     hostinger: 'Hostinger',
     reconnect: 'Reconnect',
     reconnectLabel: 'Reconnect GitHub',
+    replaceToken: 'Replace token',
+    replaceTokenLabel: 'Replace Hostinger token',
+    hostingerError: 'error — token needs replacing',
     // Appended to the source name for screen readers and tooltips, e.g. "GitHub: connected".
     state: {
       CONNECTED: 'connected',
@@ -86,6 +89,7 @@ export const strings = {
       limited: 'Connected, with limits',
       error: 'Connection problem',
       saveError: 'The token could not be saved. Please try again.',
+      replaceToken: 'Replace token',
       replaceHint: 'Paste a new token below to replace the saved one.',
       help: 'Create a token in hPanel under Account → API (a token is shown only once), then paste it here.',
       helpLink: 'Open the API page in hPanel',

@@ -144,6 +144,8 @@ Hostinger has no "log in with Hostinger", so the user pastes an API token create
 
 **Hostinger in Settings (desktop).** The Hostinger section has a password-type token field (never shown again once saved; cleared after every attempt), a link to hPanel's API page (`https://hpanel.hostinger.com/api`, opened via `openExternal`), "Save" (busy while the backend checks the token), the backend's message on `400`/`422`/`429`/`502`, and "Disconnect" with a confirmation. Opening Settings calls `POST /api/hostinger/recheck`. Tests: `SettingsHostinger.test.tsx` and `e2e/hostinger-connect.spec.ts`.
 
+**Replacing a revoked token (desktop).** When Hostinger answers 401 for the saved token, the Hostinger dot turns red ("Hostinger: error — token needs replacing") and a "Replace token" button appears next to it; it opens Settings with the token field focused. A new token is checked before it replaces the old one: an invalid one shows the message and the old state is kept. The sidebar rechecks Hostinger when the window gets focus. That the token survives a restart is not covered by the end-to-end tests (in-memory store); check by hand: save a token, quit, start again, the dot is green.
+
 ## End-to-end tests
 
 The end-to-end tests live in `desktop/e2e/`. [Playwright](https://playwright.dev) starts the **real** built Electron app, which starts the **real** backend jar, and checks what the user sees. They sit inside `desktop/` because they need its Electron binary and its built app (`out/`), so there is only one `package.json` to install.

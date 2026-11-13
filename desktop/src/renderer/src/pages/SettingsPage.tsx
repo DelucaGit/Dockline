@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -261,6 +261,9 @@ function HostingerSection({ baseUrl }: { baseUrl: string }) {
   const queryClient = useQueryClient()
   const [token, setToken] = useState('')
   const [confirming, setConfirming] = useState(false)
+  const fieldRef = useRef<HTMLInputElement>(null)
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const status = useQuery({ queryKey: statusKey(baseUrl), queryFn: () => fetchStatus(baseUrl) })
   const hostinger = status.data?.sources.find((s) => s.source === 'HOSTINGER')
@@ -289,6 +292,16 @@ function HostingerSection({ baseUrl }: { baseUrl: string }) {
   }, [baseUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const state = hostinger?.state
+
+  // "Replace token" in the sidebar lands here with { replaceToken: true }: focus the token field once it is shown.
+  const wantsReplace = (location.state as { replaceToken?: boolean } | null)?.replaceToken === true
+  useEffect(() => {
+    if (wantsReplace && fieldRef.current) {
+      fieldRef.current.scrollIntoView?.({ block: 'center' })
+      fieldRef.current.focus()
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [wantsReplace, state]) // eslint-disable-line react-hooks/exhaustive-deps
   const saveFailure = save.isError ? failureFrom(save.error, h.saveError).message : null
 
   const form = (
@@ -305,6 +318,7 @@ function HostingerSection({ baseUrl }: { baseUrl: string }) {
         </label>
         <input
           id="hostinger-token"
+          ref={fieldRef}
           type="password"
           autoComplete="off"
           spellCheck={false}
@@ -332,7 +346,7 @@ function HostingerSection({ baseUrl }: { baseUrl: string }) {
         </p>
       )}
       <Button type="submit" disabled={save.isPending || !token.trim()}>
-        {save.isPending ? h.saving : h.save}
+        {save.isPending ? h.saving : state === 'ERROR' ? h.replaceToken : h.save}
       </Button>
     </form>
   )
@@ -361,6 +375,7 @@ function HostingerSection({ baseUrl }: { baseUrl: string }) {
         {hostinger.message && <p className="text-sm text-muted-foreground">{hostinger.message}</p>}
         {state === 'ERROR' && (
           <>
+            <h3 className="font-medium">{h.replaceToken}</h3>
             <p className="text-sm text-muted-foreground">{h.replaceHint}</p>
             {form}
           </>
