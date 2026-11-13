@@ -37,7 +37,7 @@ function renderGate() {
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <BackendGate>
-          {(baseUrl) => <App footer={<BackendStatus baseUrl={baseUrl} />} />}
+          {(baseUrl) => <App baseUrl={baseUrl} footer={<BackendStatus baseUrl={baseUrl} />} />}
         </BackendGate>
       </MemoryRouter>
     </QueryClientProvider>

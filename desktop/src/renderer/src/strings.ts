@@ -27,5 +27,33 @@ export const strings = {
     domains: { title: 'Domains', empty: 'Nothing here yet.' },
     log: { title: 'Log', empty: 'Nothing here yet.' },
     settings: { title: 'Settings', empty: 'Nothing here yet.' }
+  },
+  log: {
+    title: 'Log',
+    empty: 'No errors',
+    emptyHint: 'Errors and warnings from the backend show up here.',
+    loadError: 'The log could not be loaded.',
+    refresh: 'Refresh',
+    clear: 'Clear',
+    clearError: 'The log could not be cleared.',
+    copyForAi: 'Copy for AI',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
+    noDetails: 'No further details.',
+    filters: { source: 'Source', level: 'Level', all: 'All' },
+    copy: {
+      intro: 'Dockline reported this problem. Please help me find the cause and fix it.',
+      appVersion: 'App version',
+      time: 'Time',
+      level: 'Level',
+      source: 'Source',
+      action: 'Action',
+      statusCode: 'Status code',
+      none: 'none',
+      message: 'Message',
+      request: 'Request',
+      response: 'Response',
+      stackTrace: 'Stack trace'
+    }
   }
 } as const
