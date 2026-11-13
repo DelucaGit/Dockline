@@ -72,6 +72,26 @@ export const strings = {
     // {seconds} is replaced with the seconds left.
     rateLimitedRetry: 'Rate limited, retrying in {seconds} s'
   },
+  domains: {
+    title: 'Domains',
+    empty: 'No domains',
+    noName: '(no name)',
+    noExpiry: 'No expiry date',
+    expires: 'Expires',
+    expiredOn: 'Expired',
+    expiringSoon: 'Expiring soon',
+    expired: 'Expired',
+    loadError: 'Could not load your domains.',
+    loadErrorHint: 'Please try again in a moment.',
+    notConnected: 'Hostinger is not connected',
+    notConnectedHint: 'Add your Hostinger token in Settings to see your domains.',
+    goToSettings: 'Open Settings',
+    tokenRejected: 'Hostinger no longer accepts the saved token.',
+    replaceToken: 'Replace token',
+    rateLimited: 'Rate limited',
+    // {seconds} is replaced with the seconds left.
+    rateLimitedRetry: 'Rate limited, retrying in {seconds} s'
+  },
   connections: {
     heading: 'Connections',
     github: 'GitHub',
