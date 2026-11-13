@@ -62,7 +62,14 @@ void app.whenReady().then(() => {
     { urls: ['http://127.0.0.1/*'] },
     (details, callback) => {
       callback({
-        responseHeaders: { ...details.responseHeaders, 'Access-Control-Allow-Origin': ['*'] }
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Access-Control-Allow-Origin': ['*'],
+          // PUT/DELETE and JSON bodies make the browser ask first (a preflight OPTIONS request); without these
+          // two headers it refuses, and saving a token or a link fails when the renderer is served over http (dev mode).
+          'Access-Control-Allow-Methods': ['GET, POST, PUT, DELETE, OPTIONS'],
+          'Access-Control-Allow-Headers': ['Content-Type']
+        }
       })
     }
   )
