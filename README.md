@@ -130,6 +130,18 @@ GitHub uses the **device flow**: the app shows a short code, the user enters it 
 
 **Revoked token.** When GitHub answers `401` the dot turns red ("GitHub: error — reconnect needed") and both Settings and the sidebar offer "Reconnect". The sidebar button opens Settings and starts the device flow at once; a successful approval replaces the old token and the dot turns green. Opening Settings and focusing the window call `POST /api/github/recheck`, so a revoked token shows up without waiting for the 60-second cache. Restart persistence is covered by the backend `CredentialManagerTokenStoreTest`; to check it by hand, connect, quit Dockline, start it again and look for a green GitHub dot.
 
+### Connecting to Hostinger
+
+Hostinger has no "log in with Hostinger", so the user pastes an API token created in hPanel. The backend checks it with Hostinger (`GET /api/billing/v1/subscriptions`, a read-only list every account has) **before** saving it, so a bad token is never stored and never replaces a working one. The token never appears in a response, the Log section or the log file.
+
+| Endpoint | What it does |
+|---|---|
+| `PUT /api/hostinger/token` with `{"token": "..."}` | Checks the token, then saves it. `200` answers the new `SourceStatus` (`CONNECTED`). Nothing is saved on: `400` blank/missing/over 1024 characters, `422` Hostinger rejected the token (401/403), `429` Hostinger's rate limit (passes on `Retry-After`), `502` Hostinger unreachable, timed out or answered 5xx. Errors are `application/problem+json` with a readable `detail`. |
+| `DELETE /api/hostinger/token` | Deletes the token (`204`, also when none was saved). |
+| `POST /api/hostinger/recheck` | Checks the saved token with Hostinger now and answers its `SourceStatus`. |
+
+`GET /api/status` checks the saved Hostinger token at most once a minute (saving, deleting and recheck skip the wait): `200` = `CONNECTED`, `401`/`403` = `ERROR` (revoked or expired, replace the token; also written to the Log section), `429` or Hostinger unreachable/failing = `LIMITED`. All Hostinger calls go through `HostingerClient`. Tests fake Hostinger with `HostingerStubs` (backend) and `desktop/e2e/support/hostingerStubs.ts` (`hostingerEnv`, `stubSubscriptionsOk`, `stubUnauthorized`, `stubRateLimited`, `stubServerError`, `stubConnectionReset`).
+
 ## End-to-end tests
 
 The end-to-end tests live in `desktop/e2e/`. [Playwright](https://playwright.dev) starts the **real** built Electron app, which starts the **real** backend jar, and checks what the user sees. They sit inside `desktop/` because they need its Electron binary and its built app (`out/`), so there is only one `package.json` to install.
