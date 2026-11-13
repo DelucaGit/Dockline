@@ -183,6 +183,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hostinger/domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The user's Hostinger domains (from Hostinger, or the copy saved in the last 60 s)
+         * @description Reads Hostinger's domain portfolio. Hostinger's answers are kept in memory for 60 seconds and reused, so `fetchedAt` may be up to a minute old; `refresh=true` asks Hostinger again. Dockline sends Hostinger at most 50 requests per minute across all features; a request over that waits its turn (up to a minute, then HOSTINGER_UNAVAILABLE). Errors are problem responses with a stable `code` property: HOSTINGER_NOT_CONNECTED (409), HOSTINGER_TOKEN_REJECTED (409, replace the token), HOSTINGER_RATE_LIMITED (429, Retry-After header and retryAfterSeconds) and HOSTINGER_UNAVAILABLE (502). Hostinger failures are written to the Log section and update HOSTINGER in GET /api/status at once.
+         */
+        get: operations["listHostingerDomains"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/github/repositories": {
         parameters: {
             query?: never;
@@ -376,6 +396,47 @@ export interface components {
             fetchedAt: string;
             /** @description True when the list stopped at 10 pages of 100 and more websites exist */
             truncated: boolean;
+        };
+        /** @description One domain in the user's Hostinger domain portfolio */
+        HostingerDomain: {
+            /**
+             * @description The domain name; null for a free domain that is not claimed yet
+             * @example example.com
+             */
+            domain: string | null;
+            /**
+             * Format: date-time
+             * @description When the domain expires (ISO-8601, UTC); null when Hostinger gives no date
+             * @example 2026-11-13T09:00:00Z
+             */
+            expiresAt: string | null;
+            /**
+             * @description Hostinger's status: active, pending_setup, expired, requested, pending_verification, deleted, suspended or failed
+             * @example active
+             */
+            status: string | null;
+            /**
+             * @description domain, free_domain, domain_transfer or free_domain_transfer
+             * @example domain
+             */
+            type: string | null;
+            /**
+             * Format: date-time
+             * @description When the domain was added at Hostinger (ISO-8601, UTC)
+             * @example 2025-02-27T11:54:22Z
+             */
+            createdAt: string | null;
+        };
+        /** @description The user's Hostinger domains, as Hostinger listed them at fetchedAt */
+        HostingerDomains: {
+            /** @description Earliest expiry first; domains without an expiry date last, then by name */
+            domains: components["schemas"]["HostingerDomain"][];
+            /**
+             * Format: date-time
+             * @description When Dockline fetched this from Hostinger (ISO-8601, UTC); up to 60 s old when the saved copy was reused
+             * @example 2026-11-13T09:00:00Z
+             */
+            fetchedAt: string;
         };
         /** @description The user's repositories, fetched from GitHub just now */
         GithubRepositories: {
@@ -706,6 +767,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HostingerSites"];
+                };
+            };
+            /** @description code HOSTINGER_NOT_CONNECTED: no Hostinger token saved; code HOSTINGER_TOKEN_REJECTED: Hostinger rejected the saved token (revoked or expired), replace it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code HOSTINGER_RATE_LIMITED: Hostinger's rate limit is reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code HOSTINGER_UNAVAILABLE: Hostinger could not be reached, timed out, failed or answered unexpectedly */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    listHostingerDomains: {
+        parameters: {
+            query?: {
+                /** @description True skips the copy saved in the last 60 seconds and asks Hostinger again (still counts towards the 50 requests per minute); the new answer is saved */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All domains, earliest expiry first (no expiry date last, then by name) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostingerDomains"];
                 };
             };
             /** @description code HOSTINGER_NOT_CONNECTED: no Hostinger token saved; code HOSTINGER_TOKEN_REJECTED: Hostinger rejected the saved token (revoked or expired), replace it */
