@@ -60,3 +60,23 @@ export async function disconnectGithub(baseUrl: string): Promise<void> {
 export async function recheckGithub(baseUrl: string): Promise<void> {
   await post(baseUrl, '/api/github/recheck')
 }
+
+/** Turns a failed response into an ApiProblem: code, readable detail and the Retry-After header when present. */
+export async function problemFromResponse(res: Response): Promise<ApiProblem> {
+  let title: string | undefined
+  let detail: string | undefined
+  let code: string | undefined
+  let bodySeconds: number | undefined
+  try {
+    const body = (await res.json()) as components['schemas']['ProblemDetail'] & { code?: string; retryAfterSeconds?: number }
+    title = body.title
+    detail = body.detail
+    code = body.code
+    bodySeconds = body.retryAfterSeconds
+  } catch {
+    // not JSON: just the status
+  }
+  const header = Number(res.headers.get('Retry-After'))
+  const retry = Number.isFinite(header) && header > 0 ? header : bodySeconds
+  return new ApiProblem(res.status, title, detail, code, retry && retry > 0 ? retry : undefined)
+}

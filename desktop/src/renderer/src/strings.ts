@@ -55,6 +55,23 @@ export const strings = {
     // {seconds} is replaced with the Retry-After value.
     rateLimitedRetry: 'Try again in about {seconds} seconds.'
   },
+  sites: {
+    title: 'Sites',
+    empty: 'No websites',
+    suspended: 'Suspended',
+    noDomain: '(no domain)',
+    truncated: 'Showing the first 1,000 websites; more exist on Hostinger.',
+    loadError: 'Could not load your websites.',
+    loadErrorHint: 'Please try again in a moment.',
+    notConnected: 'Hostinger is not connected',
+    notConnectedHint: 'Add your Hostinger token in Settings to see your websites.',
+    goToSettings: 'Open Settings',
+    tokenRejected: 'Hostinger no longer accepts the saved token.',
+    replaceToken: 'Replace token',
+    rateLimited: 'Rate limited',
+    // {seconds} is replaced with the seconds left.
+    rateLimitedRetry: 'Rate limited, retrying in {seconds} s'
+  },
   connections: {
     heading: 'Connections',
     github: 'GitHub',
