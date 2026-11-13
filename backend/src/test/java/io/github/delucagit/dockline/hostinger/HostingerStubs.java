@@ -24,6 +24,7 @@ public final class HostingerStubs {
 
     public static final String SUBSCRIPTIONS_PATH = "/api/billing/v1/subscriptions";
     public static final String WEBSITES_PATH = "/api/hosting/v1/websites";
+    public static final String DOMAINS_PATH = "/api/domains/v1/portfolio";
 
     private HostingerStubs() {}
 
@@ -139,6 +140,45 @@ public final class HostingerStubs {
 
     public static void websitesConnectionReset(WireMockServer hostinger) {
         hostinger.stubFor(get(urlPathEqualTo(WEBSITES_PATH))
+                .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+    }
+
+    /**
+     * One domain as {@code GET /api/domains/v1/portfolio} returns it. {@code domain} and {@code expiresAt} may be
+     * null (a free domain not claimed yet); timestamps are in Hostinger's format, e.g. {@code 2026-02-27T11:54:22Z}.
+     */
+    public static String domain(long id, String domain, String status, String expiresAt) {
+        return """
+                {"id":%d,"domain":%s,"type":"domain","status":"%s","created_at":"2025-02-27T11:54:22Z","expires_at":%s}"""
+                .formatted(id, domain == null ? "null" : "\"" + domain + "\"", status,
+                        expiresAt == null ? "null" : "\"" + expiresAt + "\"");
+    }
+
+    /** The domain portfolio: a plain JSON array, no paging. */
+    public static void domains(WireMockServer hostinger, List<String> domains) {
+        hostinger.stubFor(get(urlPathEqualTo(DOMAINS_PATH)).willReturn(okJson("[" + String.join(",", domains) + "]")));
+    }
+
+    /** The domain portfolio answers 401; {@code echo} is put into the body to check that it gets masked. */
+    public static void domainsUnauthorized(WireMockServer hostinger, String echo) {
+        hostinger.stubFor(get(urlPathEqualTo(DOMAINS_PATH)).willReturn(error(401, """
+                {"message":"Unauthenticated.","correlation_id":"c0ffee00-0000-4000-8000-000000000021","debug":"%s"}"""
+                .formatted(echo))));
+    }
+
+    public static void domainsRateLimited(WireMockServer hostinger, int retryAfterSeconds) {
+        hostinger.stubFor(get(urlPathEqualTo(DOMAINS_PATH)).willReturn(error(429, """
+                {"message":"Too Many Attempts.","correlation_id":"c0ffee00-0000-4000-8000-000000000022"}""")
+                .withHeader("Retry-After", Integer.toString(retryAfterSeconds))));
+    }
+
+    public static void domainsServerError(WireMockServer hostinger) {
+        hostinger.stubFor(get(urlPathEqualTo(DOMAINS_PATH)).willReturn(error(500, """
+                {"message":"Server Error","correlation_id":"c0ffee00-0000-4000-8000-000000000023"}""")));
+    }
+
+    public static void domainsConnectionReset(WireMockServer hostinger) {
+        hostinger.stubFor(get(urlPathEqualTo(DOMAINS_PATH))
                 .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
     }
 

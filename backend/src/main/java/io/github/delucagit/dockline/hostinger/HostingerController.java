@@ -34,7 +34,7 @@ import org.springframework.web.client.RestClientException;
  */
 @RestController
 @RequestMapping("/api/hostinger")
-@Tag(name = "Hostinger", description = "Save (after checking), check and remove the Hostinger API token; list websites")
+@Tag(name = "Hostinger", description = "Save (after checking), check and remove the Hostinger API token; list websites and domains")
 class HostingerController {
 
     /** Hostinger tokens are far shorter; anything longer is not a token. */
@@ -44,9 +44,11 @@ class HostingerController {
     private final HostingerStatusProvider status;
     private final TokenStore tokenStore;
     private final HostingerSiteList siteList;
+    private final HostingerDomainList domainList;
 
     HostingerController(HostingerClient client, HostingerStatusProvider status, TokenStore tokenStore,
-            HostingerSiteList siteList) {
+            HostingerSiteList siteList, HostingerDomainList domainList) {
+        this.domainList = domainList;
         this.client = client;
         this.status = status;
         this.tokenStore = tokenStore;
@@ -76,6 +78,31 @@ class HostingerController {
             + "asks Hostinger again (still counts towards the 50 requests per minute); the new answer is saved")
             @RequestParam(defaultValue = "false") boolean refresh) {
         return siteList.list(refresh);
+    }
+
+    @GetMapping(path = "/domains", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(operationId = "listHostingerDomains", summary = "The user's Hostinger domains (from Hostinger, or the copy saved in the last 60 s)",
+            description = "Reads Hostinger's domain portfolio. Hostinger's answers are kept in memory for "
+                    + "60 seconds and reused, so `fetchedAt` may be up to a minute old; `refresh=true` asks Hostinger "
+                    + "again. Dockline sends Hostinger at most 50 requests per minute across all features; a request "
+                    + "over that waits its turn (up to a minute, then HOSTINGER_UNAVAILABLE). Errors are problem responses with a stable "
+                    + "`code` property: HOSTINGER_NOT_CONNECTED (409), HOSTINGER_TOKEN_REJECTED (409, replace the "
+                    + "token), HOSTINGER_RATE_LIMITED (429, Retry-After header and retryAfterSeconds) and "
+                    + "HOSTINGER_UNAVAILABLE (502). Hostinger failures are written to the Log section and update "
+                    + "HOSTINGER in GET /api/status at once.")
+    @ApiResponse(responseCode = "200", description = "All domains, earliest expiry first (no expiry date last, then by name)")
+    @ApiResponse(responseCode = "409", description = "code HOSTINGER_NOT_CONNECTED: no Hostinger token saved; "
+            + "code HOSTINGER_TOKEN_REJECTED: Hostinger rejected the saved token (revoked or expired), replace it",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "429", description = "code HOSTINGER_RATE_LIMITED: Hostinger's rate limit is reached",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "502", description = "code HOSTINGER_UNAVAILABLE: Hostinger could not be reached, "
+            + "timed out, failed or answered unexpectedly",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    HostingerApi.Domains domains(@Parameter(description = "True skips the copy saved in the last 60 seconds and "
+            + "asks Hostinger again (still counts towards the 50 requests per minute); the new answer is saved")
+            @RequestParam(defaultValue = "false") boolean refresh) {
+        return domainList.list(refresh);
     }
 
     /** The token the user pasted. */

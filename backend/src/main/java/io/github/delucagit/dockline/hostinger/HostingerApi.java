@@ -40,4 +40,28 @@ final class HostingerApi {
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "True when the list stopped at "
                     + HostingerSiteList.MAX_PAGES + " pages of " + HostingerClient.WEBSITES_PER_PAGE
                     + " and more websites exist") boolean truncated) {}
+
+    @Schema(name = "HostingerDomain", description = "One domain in the user's Hostinger domain portfolio")
+    record Domain(
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, example = "example.com",
+                    description = "The domain name; null for a free domain that is not claimed yet") String domain,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, example = "2026-11-13T09:00:00Z",
+                    description = "When the domain expires (ISO-8601, UTC); null when Hostinger gives no date")
+            Instant expiresAt,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, example = "active",
+                    description = "Hostinger's status: active, pending_setup, expired, requested, "
+                            + "pending_verification, deleted, suspended or failed") String status,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, example = "domain",
+                    description = "domain, free_domain, domain_transfer or free_domain_transfer") String type,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, example = "2025-02-27T11:54:22Z",
+                    description = "When the domain was added at Hostinger (ISO-8601, UTC)") Instant createdAt) {}
+
+    @Schema(name = "HostingerDomains", description = "The user's Hostinger domains, as Hostinger listed them at fetchedAt")
+    record Domains(
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
+                    description = "Earliest expiry first; domains without an expiry date last, then by name")
+            List<Domain> domains,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "2026-11-13T09:00:00Z",
+                    description = "When Dockline fetched this from Hostinger (ISO-8601, UTC); up to 60 s old when "
+                            + "the saved copy was reused") Instant fetchedAt) {}
 }

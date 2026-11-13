@@ -50,6 +50,8 @@ class HostingerClient {
     static final String SUBSCRIPTIONS_PATH = "/api/billing/v1/subscriptions";
     /** The websites in the user's hosting accounts (and ones shared with them), paged with page and per_page. */
     static final String WEBSITES_PATH = "/api/hosting/v1/websites";
+    /** The domain portfolio: all domains of the user, one unpaged array. */
+    static final String DOMAINS_PATH = "/api/domains/v1/portfolio";
     /** The largest page Hostinger allows for the website list. */
     static final int WEBSITES_PER_PAGE = 100;
     /** The first request plus up to two retries after Hostinger's 429. */
@@ -119,7 +121,19 @@ class HostingerClient {
      * A successful answer younger than 60 seconds is reused; {@code refresh} skips it and saves the new answer.
      */
     Reply getWebsites(int page, String token, boolean refresh) {
-        return cachedGet(websitesUrl(page), token, refresh);
+        return cachedGet(websitesUrl(page), WEBSITES_PATH, token, refresh);
+    }
+
+    /**
+     * The user's domain portfolio (one JSON array, no paging), cached for 60 seconds like the websites;
+     * {@code refresh} skips the saved answer.
+     */
+    Reply getDomains(String token, boolean refresh) {
+        return cachedGet(domainsUrl(), DOMAINS_PATH, token, refresh);
+    }
+
+    String domainsUrl() {
+        return hostinger.apiUrl() + DOMAINS_PATH;
     }
 
     /** Forgets every saved answer; called when the token is saved or removed. */
@@ -131,14 +145,14 @@ class HostingerClient {
         return hostinger.apiUrl() + WEBSITES_PATH + "?page=" + page + "&per_page=" + WEBSITES_PER_PAGE;
     }
 
-    private Reply cachedGet(String url, String token, boolean refresh) {
+    private Reply cachedGet(String url, String path, String token, boolean refresh) {
         if (!refresh) {
             Optional<Reply> saved = cache.get("GET", url, token);
             if (saved.isPresent()) {
                 return saved.get();
             }
         }
-        Reply reply = send(url, WEBSITES_PATH, token, true);
+        Reply reply = send(url, path, token, true);
         cache.put("GET", url, token, reply);
         return reply;
     }
