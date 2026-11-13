@@ -3,9 +3,10 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { strings } from '@/strings'
 import { routes } from '@/routes'
+import { LogPage } from '@/pages/LogPage'
 import { Placeholder } from '@/pages/Placeholder'
 
-export function App({ footer }: { footer?: ReactNode }) {
+export function App({ footer, baseUrl }: { footer?: ReactNode; baseUrl?: string }) {
   return (
     <div className="flex h-screen">
       <nav
@@ -34,7 +35,7 @@ export function App({ footer }: { footer?: ReactNode }) {
         <Routes>
           <Route path="/" element={<Navigate to={routes[0].path} replace />} />
           {routes.map(({ path, page }) => (
-            <Route key={path} path={path} element={<Placeholder {...page} />} />
+            <Route key={path} path={path} element={path === '/log' && baseUrl ? <LogPage baseUrl={baseUrl} /> : <Placeholder {...page} />} />
           ))}
           <Route path="*" element={<Navigate to={routes[0].path} replace />} />
         </Routes>

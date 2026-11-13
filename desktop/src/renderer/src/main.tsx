@@ -14,7 +14,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <HashRouter>
         <BackendGate>
-          {(baseUrl) => <App footer={<BackendStatus baseUrl={baseUrl} />} />}
+          {(baseUrl) => <App baseUrl={baseUrl} footer={<BackendStatus baseUrl={baseUrl} />} />}
         </BackendGate>
       </HashRouter>
     </QueryClientProvider>
