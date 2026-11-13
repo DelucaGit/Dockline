@@ -450,6 +450,26 @@ class SiteLinksApiTest {
     }
 
     @Test
+    void aWebsiteWithoutGitIsNotAskedAboutAgainForFiveMinutes() throws Exception {
+        sites("nogit.example");
+        HostingerStubs.gitNotAvailable(HOSTINGER, USER, "nogit.example");
+
+        JsonNode first = JSON.readTree(send("GET", "/api/sites/links", null).body());
+        assertThat(first.get("links").get(0).get("source").asString()).isEqualTo("NONE");
+        assertThat(first.get("links").get(0).get("hostingerChecked").asBoolean()).isTrue();
+        assertThat(first.get("complete").asBoolean()).isTrue();
+        int asked = HOSTINGER.findAll(getRequestedFor(urlPathMatching(GIT_PATHS))).size();
+        assertThat(asked).isEqualTo(2);
+
+        clock.advanceSeconds(200);
+        JsonNode again = JSON.readTree(send("GET", "/api/sites/links", null).body());
+        assertThat(again.get("links")).isEqualTo(first.get("links"));
+        assertThat(JSON.readTree(send("GET", "/api/sites/nogit.example", null).body()).get("source").asString())
+                .isEqualTo("NONE");
+        assertThat(HOSTINGER.findAll(getRequestedFor(urlPathMatching(GIT_PATHS)))).hasSize(asked);
+    }
+
+    @Test
     void theLinksListNeverSendsMoreThanItsShareOfTheRequestCap() throws Exception {
         List<String> domains = IntStream.rangeClosed(1, 30).mapToObj(i -> "site-%02d.example".formatted(i)).toList();
         sites(domains.toArray(String[]::new));

@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  * Successful Hostinger answers, kept in memory for {@link #TTL} (or longer when the reader asks for it, see
  * {@link #get(String, String, String, Duration)}) so repeated views reuse them instead of asking Hostinger again. Keyed by method, URL and a SHA-256 hash of the token (the token itself is never kept here),
  * so another token never sees these answers; saving or removing the token also clears everything. Holds at most
- * {@link #MAX_ENTRIES} answers (oldest dropped first). Errors are never stored. Thread-safe.
+ * {@link #MAX_ENTRIES} answers (oldest dropped first). Errors are never stored (except a "no Git here" answer, see {@link #putAny}). Thread-safe.
  */
 @Component
 class HostingerResponseCache {
@@ -59,10 +59,18 @@ class HostingerResponseCache {
     /** Saves a successful answer (replacing an older one for the same request); anything else is ignored. */
     synchronized void put(String method, String url, String token, HostingerClient.Reply reply) {
         if (reply.ok()) {
-            String key = key(method, url, token);
-            replies.remove(key);
-            replies.put(key, reply);
+            putAny(method, url, token, reply);
         }
+    }
+
+    /**
+     * Saves an answer whatever its status. Only for answers that are a fact rather than a failure, e.g. Hostinger's
+     * 404/422 "this website has no Git", so a website without Git is not asked about again on every view.
+     */
+    synchronized void putAny(String method, String url, String token, HostingerClient.Reply reply) {
+        String key = key(method, url, token);
+        replies.remove(key);
+        replies.put(key, reply);
     }
 
     synchronized void clear() {

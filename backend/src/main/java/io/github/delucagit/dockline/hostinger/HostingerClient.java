@@ -99,6 +99,11 @@ class HostingerClient {
             return status >= 200 && status < 300;
         }
 
+        /** 404 or 422 on a Git path: Hostinger saying the website has no Git at all. */
+        boolean noGit() {
+            return status == 404 || status == 422;
+        }
+
         /** 401 (what Hostinger documents for a missing, expired or revoked token) or 403. */
         boolean tokenRejected() {
             return status == 401 || status == 403;
@@ -162,7 +167,12 @@ class HostingerClient {
      * that need encoding.
      */
     Reply getGit(String path, String token, boolean refresh) {
-        return cachedGet(hostinger.apiUrl() + path, path, token, refresh, GIT_TTL);
+        Reply reply = cachedGet(hostinger.apiUrl() + path, path, token, refresh, GIT_TTL);
+        if (reply.noGit()) {
+            // "No Git on this website" is an answer, not a failure: keep it like a successful one.
+            cache.putAny("GET", hostinger.apiUrl() + path, token, reply);
+        }
+        return reply;
     }
 
     /** The saved answer {@link #getGit} would reuse, if there is one; Hostinger is never asked. */
