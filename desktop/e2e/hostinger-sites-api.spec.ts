@@ -102,7 +102,7 @@ test("the renderer can list (fake) Hostinger websites and gets a clear problem f
     ],
     { pages: 3 },
   );
-  const listed = await call("/api/hostinger/sites");
+  const listed = await call("/api/hostinger/sites?refresh=true");
   expect(listed.status).toBe(200);
   const body = JSON.parse(listed.body) as {
     sites: unknown[];
@@ -130,7 +130,7 @@ test("the renderer can list (fake) Hostinger websites and gets a clear problem f
   ]);
 
   await stubSitesRateLimited(wiremock, 60);
-  const limited = await call("/api/hostinger/sites");
+  const limited = await call("/api/hostinger/sites?refresh=true");
   expect(limited.status).toBe(429);
   expect(limited.retryAfter).toBe("60");
   expect(JSON.parse(limited.body)).toMatchObject({
@@ -138,14 +138,14 @@ test("the renderer can list (fake) Hostinger websites and gets a clear problem f
   });
 
   await stubSitesServerError(wiremock);
-  const failing = await call("/api/hostinger/sites");
+  const failing = await call("/api/hostinger/sites?refresh=true");
   expect(failing.status).toBe(502);
   expect(JSON.parse(failing.body)).toMatchObject({
     code: "HOSTINGER_UNAVAILABLE",
   });
 
   await stubSitesUnauthorized(wiremock);
-  const rejected = await call("/api/hostinger/sites");
+  const rejected = await call("/api/hostinger/sites?refresh=true");
   expect(rejected.status).toBe(409);
   expect(JSON.parse(rejected.body)).toMatchObject({
     code: "HOSTINGER_TOKEN_REJECTED",

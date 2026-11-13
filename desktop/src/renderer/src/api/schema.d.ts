@@ -171,8 +171,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The user's Hostinger websites, fetched from Hostinger now
-         * @description Follows all pages of Hostinger's website list. Errors are problem responses with a stable `code` property: HOSTINGER_NOT_CONNECTED (409), HOSTINGER_TOKEN_REJECTED (409, replace the token), HOSTINGER_RATE_LIMITED (429, Retry-After header when Hostinger sends one) and HOSTINGER_UNAVAILABLE (502). Hostinger failures are written to the Log section and update HOSTINGER in GET /api/status at once.
+         * The user's Hostinger websites (from Hostinger, or the copy saved in the last 60 s)
+         * @description Follows all pages of Hostinger's website list. Hostinger's answers are kept in memory for 60 seconds and reused, so `fetchedAt` may be up to a minute old; `refresh=true` asks Hostinger again. Dockline sends Hostinger at most 50 requests per minute across all features; a request over that waits its turn (up to a minute, then HOSTINGER_UNAVAILABLE). Errors are problem responses with a stable `code` property: HOSTINGER_NOT_CONNECTED (409), HOSTINGER_TOKEN_REJECTED (409, replace the token), HOSTINGER_RATE_LIMITED (429, Retry-After header when Hostinger sends one) and HOSTINGER_UNAVAILABLE (502). Hostinger failures are written to the Log section and update HOSTINGER in GET /api/status at once.
          */
         get: operations["listHostingerSites"];
         put?: never;
@@ -358,13 +358,13 @@ export interface components {
              */
             createdAt: string | null;
         };
-        /** @description The user's Hostinger websites, fetched from Hostinger just now */
+        /** @description The user's Hostinger websites, as Hostinger listed them at fetchedAt */
         HostingerSites: {
             /** @description Sorted by domain (A-Z); websites without a domain last */
             sites: components["schemas"]["HostingerSite"][];
             /**
              * Format: date-time
-             * @description When Dockline fetched this from Hostinger (ISO-8601, UTC)
+             * @description When Dockline fetched this from Hostinger (ISO-8601, UTC); up to 60 s old when the saved copy was reused
              * @example 2026-11-13T09:00:00Z
              */
             fetchedAt: string;
@@ -683,7 +683,10 @@ export interface operations {
     };
     listHostingerSites: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description True skips the copy saved in the last 60 seconds and asks Hostinger again (still counts towards the 50 requests per minute); the new answer is saved */
+                refresh?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
