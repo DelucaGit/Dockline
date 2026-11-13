@@ -132,7 +132,7 @@ Backend code uses the `SiteRepoLinkRepository` interface (`find(domain)`, `findA
 - **Unusable file** (not JSON, no valid `version`, or written by a newer Dockline). The app starts with no links, the file is kept as `settings.corrupt-<UTC time>.json` in the same folder, and a `WARN` from `BACKEND` (action `Read settings file`) appears in the Log section.
 - The file is read once at start-up; all access is thread-safe.
 
-There are no REST endpoints for the links yet. Tests: `SettingsFileTest`, `JsonFileSiteRepoLinkRepositoryTest` and `SettingsFileStartupTest`.
+The REST endpoints that read and change the links are described under "Site–repo links" below. Tests: `SettingsFileTest`, `JsonFileSiteRepoLinkRepositoryTest` and `SettingsFileStartupTest`.
 
 ### Connecting to GitHub
 
@@ -203,7 +203,7 @@ Errors are the same as for websites: `409` `HOSTINGER_NOT_CONNECTED`, `409` `HOS
 **Request cap and cache.** Hostinger allows about 90 requests a minute and can block the IP address after repeated violations, so `HostingerClient` (the one place every Hostinger request goes through) protects the account in two ways:
 
 - **At most 50 requests per rolling minute**, counted across every feature (token check, status dot, recheck, websites, domains). A request over the cap is not refused: it waits until the oldest request in the window is a minute old, then goes out. If the cap stays full for a whole minute, the call fails like an unreachable Hostinger (`502` `HOSTINGER_UNAVAILABLE`, yellow dot). `HostingerRateLimiter`.
-- **Successful answers are kept in memory for 60 seconds** (`HostingerResponseCache`, at most 100 answers, keyed by method, URL and a hash of the token, never the token itself) and reused for the website and domain lists, so opening Sites or Domains again within a minute does not call Hostinger. Errors are never kept. Saving or removing the token clears the cache. `GET /api/hostinger/sites?refresh=true` (and `/domains`) skips the saved copy, asks Hostinger (this still counts towards the 50) and keeps the new answer. Checking a token (`PUT /api/hostinger/token`, `POST /api/hostinger/recheck`) always asks Hostinger; the status dot keeps its own once-a-minute result.
+- **Successful answers are kept in memory for 60 seconds** (`HostingerResponseCache`, at most 500 answers, keyed by method, URL and a hash of the token, never the token itself) and reused for the website and domain lists, so opening Sites or Domains again within a minute does not call Hostinger. Answers about a website's Git connection are reused for five minutes instead (see "Site–repo links"). Errors are never kept. Saving or removing the token clears the cache. `GET /api/hostinger/sites?refresh=true` (and `/domains`) skips the saved copy, asks Hostinger (this still counts towards the 50) and keeps the new answer. Checking a token (`PUT /api/hostinger/token`, `POST /api/hostinger/recheck`) always asks Hostinger; the status dot keeps its own once-a-minute result.
 
 Both rules use the `Clock` bean, and waiting goes through the `Waiter` bean (`Thread.sleep` in the app). Tests use `MutableClock` and `ClockAdvancingWaiter`, which moves the clock instead of sleeping; `HostingerCapAndCacheApiTest` proves the cap, the cache, expiry, refresh, that errors and token checks are not cached, and that a token change clears the cache, by counting the calls WireMock receives.
 
@@ -221,6 +221,89 @@ Both rules use the `Clock` bean, and waiting goes through the `Waiter` bean (`Th
 - While the wait lasts, `GET /api/status` reports Hostinger as `LIMITED` with `retryAfterSeconds` (seconds left, rounded up) and the message "Hostinger asked us to slow down; retrying in 23 s.", without calling Hostinger; afterwards it checks the token again. `retryAfterSeconds` is `null` at all other times.
 
 Tests: `HostingerRetryAfterApiTest` (the wait and retry, HTTP-date and default waits, the immediate `429` and no calls during a long wait, the countdown in the status, one log entry per `429`, bounded retries). The E2E fake `stubSitesRateLimitedOnce(wiremock, seconds)` answers `429` once and then lets `stubSites` answer (a WireMock scenario), for "Hostinger says slow down, then recovers".
+
+### Site–repo links
+
+Which GitHub repository belongs to a site. A site is identified by its domain (case does not matter). The link comes from one of two places, and Hostinger always wins:
+
+1. **Hostinger's Git connection** (`source: "HOSTINGER"`). Found without any setup, and it cannot be changed in Dockline.
+2. **A manual link** saved in the settings file (`source: "MANUAL"`). While a Hostinger Git connection exists, a saved manual link is not shown, but it is kept and shows again if the connection is removed.
+
+Otherwise `source` is `"NONE"`.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/sites/{domain}` | The site detail. Add `?refresh=true` to ask Hostinger again about this site's Git connection. |
+| `GET /api/sites/links` | The link of every site in one call, for the Sites list. |
+| `PUT /api/sites/{domain}/repo` | Sets or changes the manual link. Body `{"repoFullName": "owner/name"}`. Answers like the site detail. |
+| `DELETE /api/sites/{domain}/repo` | Removes the manual link. `204`, also when there was none. Needs neither Hostinger nor GitHub. |
+
+**Site detail.** `GET /api/sites/example.com` answers:
+
+```json
+{
+  "domain": "example.com",
+  "repo": { "fullName": "octocat/my-site", "htmlUrl": "https://github.com/octocat/my-site" },
+  "source": "HOSTINGER",
+  "hostingerChecked": true,
+  "repoWarning": null,
+  "problems": []
+}
+```
+
+- `repo` is `null` when `source` is `NONE`.
+- `repoWarning` is `{code, message}` when GitHub says the linked repository is missing or not accessible (checked with GitHub's `GET /repos/{owner}/{repo}`). This is a warning, not an error: the answer is still `200` and the link is kept. Codes: `REPO_NOT_FOUND` (`404`: deleted, or private and not visible to the connected user), `REPO_NOT_ACCESSIBLE` (`403` that is not a rate limit, or `451`), `REPO_MOVED` (`301`: renamed or transferred).
+- `problems` lists the sources that could not be asked, at most one entry each: `{source, code, message, retryAfterSeconds}` with `source` `HOSTINGER` or `GITHUB` and the same codes as the list endpoints (`HOSTINGER_NOT_CONNECTED`, `HOSTINGER_TOKEN_REJECTED`, `HOSTINGER_RATE_LIMITED`, `HOSTINGER_UNAVAILABLE`, `GITHUB_NOT_CONNECTED`, `GITHUB_TOKEN_REJECTED`, `GITHUB_RATE_LIMITED`, `GITHUB_UNAVAILABLE`). **One failing source does not break the other**: the answer is still `200`.
+  - GitHub cannot be asked: the link is shown as usual, without the repository check (`repoWarning` is `null`).
+  - Hostinger cannot be asked: `hostingerChecked` is `false` and the answer comes from the saved manual links alone (`MANUAL` or `NONE`).
+- The only error of the detail is `404` `SITE_NOT_FOUND`: Hostinger answered and has no website with that domain.
+- Failures are written to the Log section and update the status dots exactly as for the list endpoints ("not connected" is not logged; a repository warning is not logged either).
+
+**Setting a manual link.** `PUT /api/sites/{domain}/repo` asks Hostinger afresh whether the site is Git-connected, then saves. It does not need GitHub: a repository that does not exist is saved and comes back with a `repoWarning`. Errors are problem responses with a `code`:
+
+| Status | `code` | When |
+|---|---|---|
+| `400` | `INVALID_REPOSITORY` | `repoFullName` is missing or not `owner/name` |
+| `404` | `SITE_NOT_FOUND` | Hostinger has no website with that domain |
+| `409` | `SITE_GIT_CONNECTED` | The site is Git-connected in Hostinger; a manual link cannot be set (the `detail` names the connected repository) |
+| `409` / `429` / `502` | `HOSTINGER_NOT_CONNECTED`, `HOSTINGER_TOKEN_REJECTED`, `HOSTINGER_RATE_LIMITED`, `HOSTINGER_UNAVAILABLE` | Hostinger could not be asked, so Dockline cannot tell whether the site is Git-connected. Nothing is saved |
+| `500` | `SETTINGS_UNAVAILABLE` | The settings file could not be written (also for `DELETE`); nothing changed |
+
+**Links for the Sites list.** `GET /api/sites/links` always answers `200`:
+
+```json
+{
+  "links": [
+    { "domain": "example.com", "repo": { "fullName": "octocat/my-site", "htmlUrl": "https://github.com/octocat/my-site" }, "source": "HOSTINGER", "hostingerChecked": true },
+    { "domain": "plain.example", "repo": null, "source": "NONE", "hostingerChecked": true }
+  ],
+  "complete": true,
+  "problems": []
+}
+```
+
+One entry per Hostinger website that has a domain, sorted by domain. GitHub is not asked here (`htmlUrl` is built from the name; the repository check belongs to the detail). `complete` is `true` when every entry has `hostingerChecked: true`. When Hostinger cannot list the websites, `problems` holds one `HOSTINGER` entry and `links` holds the saved manual links, so they stay reachable.
+
+**How a Git connection is found.** Hostinger has two kinds, on two endpoints, and neither lists the other's; `HostingerGitConnections` reads both through `HostingerClient`. The path parameters `username` and `domain` come from the website list.
+
+- `GET /api/hosting/v1/accounts/{username}/websites/{domain}/git/auto-deployments/settings`: auto-deployment through Hostinger's GitHub app. Answers `{installation_uuid, is_enabled, owner, repository, branch, directory}`, all `null` when not set up. A paused one (`is_enabled: false`) still counts. Because the same feature exists for GitLab, the provider of the installation is looked up in `GET /api/hosting/v1/git/installations`; an installation that is not listed is taken to be GitHub.
+- `GET /api/hosting/v1/accounts/{username}/websites/{domain}/git/repositories`: repositories cloned in hPanel's Git section. Answers an array of `{repository_url, branch, directory, webhook}`. `repository_url` is read in every github.com form: `https://github.com/owner/name(.git)`, with masked credentials (`https://***@github.com/...`, `https://***:***@github.com/...`), `git@github.com:owner/name.git`, `ssh://git@github.com(:22)/...` and `git://`. With several GitHub repositories the one in the document root (empty `directory`) wins, else the first.
+
+The auto-deployment is asked first and wins; the Git section is only asked when it has no GitHub repository. These count as **not Git-connected** (never an error), so such a site can still get a manual link:
+
+- a website without a `username` or `domain` (it cannot be asked about);
+- a repository on another host (GitLab, Bitbucket, a private server): Dockline only links GitHub repositories;
+- a website for which Hostinger answers `404` or `422` on these endpoints.
+
+**Staying under the request cap.** Finding a Git connection costs one or two Hostinger requests per site (plus one for the installations), so:
+
+- The answers are reused for **five minutes** (`HostingerClient.GIT_TTL`) instead of 60 seconds: a Git connection changes only when the user changes it in hPanel. `GET /api/sites/{domain}?refresh=true` asks again about that one site.
+- `GET /api/sites/links` sends at most **40 Git requests per call** (`SiteLinks.MAX_REQUESTS_PER_LIST`). With 20 sites or fewer everything is answered at once: at most 40 requests plus the website list and the installations, under the cap of 50 a minute. With more sites, the rest come back with `hostingerChecked: false` (`complete: false`) and are filled in by a later call, which only asks about the sites not answered yet.
+- Opening the Sites view again within five minutes sends no Git request at all.
+- The list stops asking at the first Hostinger failure (one `problems` entry) instead of repeating a failing request for every site.
+- Everything still goes through `HostingerClient`, so the cap of 50 a minute and the `429` handling above apply whatever happens.
+
+Tests: `SiteLinksApiTest` (both kinds of Git connection, other Git hosts, set / change / remove, the refusal, repository warnings, each source failing on its own, the request counts and the five-minute reuse), `HostingerGitConnectionsTest` (the address forms) and `e2e/site-links-api.spec.ts`. Fakes: `HostingerStubs.gitAutoDeployment(...)`, `gitRepositories(...)`, `gitNotConnected(...)`, `gitNoAutoDeployment(...)`, `gitInstallations(...)`, `gitServerError(...)`, `gitUnauthorized(...)`, `gitRateLimited(...)` and `GithubStubs.repository(...)`, `repositoryNotFound(...)`, `repositoryError(...)`; for the end-to-end tests `stubGitAutoDeployment`, `stubGitRepositories`, `stubGitNotConnected`, `stubGitNoAutoDeployment`, `stubGitInstallations`, `stubGitServerError` (`hostingerStubs.ts`) and `stubRepository`, `stubRepositoryNotFound`, `stubRepositoryError` (`githubStubs.ts`). The shapes follow Hostinger's OpenAPI document (`github.com/hostinger/api`, `openapi.json`); the real API is never called.
 
 ## End-to-end tests
 
