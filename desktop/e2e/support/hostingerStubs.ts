@@ -3,7 +3,8 @@ import type { WireMock } from "./wiremock";
 /**
  * A fake Hostinger public API for end-to-end tests, on top of a running WireMock:
  * GET /api/billing/v1/subscriptions, the call the backend uses to check a token, and
- * GET /api/hosting/v1/websites, the paged website list (`stubSites`). Errors look like
+ * GET /api/hosting/v1/websites, the paged website list (`stubSites`), and GET /api/domains/v1/portfolio,
+ * the domain list (`stubDomains`). Errors look like
  * Hostinger's documented ones: `{ message, correlation_id }`.
  * The backend tests use the same fakes (backend/src/test/.../hostinger/HostingerStubs.java).
  *
@@ -247,6 +248,98 @@ export async function stubSitesServerError(wiremock: WireMock): Promise<void> {
       jsonBody: {
         message: "Server Error",
         correlation_id: "c0ffee00-0000-4000-8000-000000000013",
+      },
+    },
+  });
+}
+
+export const DOMAINS_PATH = "/api/domains/v1/portfolio";
+
+/** One domain as the tests describe it; `stubDomains` turns it into Hostinger's JSON. */
+export interface FakeDomain {
+  /** null for a free domain that is not claimed yet. */
+  domain: string | null;
+  /** Hostinger's format, e.g. 2026-02-27T11:54:22Z; null for no expiry date. Default: 2027-01-01T00:00:00Z. */
+  expiresAt?: string | null;
+  status?:
+    | "active"
+    | "pending_setup"
+    | "expired"
+    | "requested"
+    | "pending_verification"
+    | "deleted"
+    | "suspended"
+    | "failed";
+  type?: "domain" | "free_domain" | "domain_transfer" | "free_domain_transfer";
+  createdAt?: string;
+}
+
+/** The domain portfolio: a plain JSON array of domains, no paging. */
+export async function stubDomains(
+  wiremock: WireMock,
+  domains: FakeDomain[],
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: DOMAINS_PATH },
+    response: {
+      status: 200,
+      jsonBody: domains.map((d, i) => ({
+        id: 1000 + i,
+        domain: d.domain,
+        type: d.type ?? "domain",
+        status: d.status ?? "active",
+        created_at: d.createdAt ?? "2025-02-27T11:54:22Z",
+        expires_at:
+          d.expiresAt === undefined ? "2027-01-01T00:00:00Z" : d.expiresAt,
+      })),
+    },
+  });
+}
+
+/** The domain portfolio answers 401: the token is missing, expired or revoked. */
+export async function stubDomainsUnauthorized(
+  wiremock: WireMock,
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: DOMAINS_PATH },
+    response: {
+      status: 401,
+      jsonBody: {
+        message: "Unauthenticated.",
+        correlation_id: "c0ffee00-0000-4000-8000-000000000021",
+      },
+    },
+  });
+}
+
+/** The domain portfolio answers 429 with Retry-After. */
+export async function stubDomainsRateLimited(
+  wiremock: WireMock,
+  retryAfterSeconds = 30,
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: DOMAINS_PATH },
+    response: {
+      status: 429,
+      headers: { "Retry-After": String(retryAfterSeconds) },
+      jsonBody: {
+        message: "Too Many Attempts.",
+        correlation_id: "c0ffee00-0000-4000-8000-000000000022",
+      },
+    },
+  });
+}
+
+export async function stubDomainsServerError(
+  wiremock: WireMock,
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: DOMAINS_PATH },
+    response: {
+      status: 500,
+      jsonBody: {
+        message: "Server Error",
+        correlation_id: "c0ffee00-0000-4000-8000-000000000023",
       },
     },
   });
