@@ -29,6 +29,11 @@ import tools.jackson.databind.ObjectMapper;
  * sorted by earliest expiry (no expiry last), then by name. The call goes through {@link HostingerClient}
  * (shared request cap, 60-second cache, 429 handling). Failures use the same codes, Log entries and status
  * updates as {@link HostingerSiteList}.
+ *
+ * <p>The portfolio has no {@code expires_at} for some domains (a free domain that came with a hosting plan).
+ * For each named domain without a date, {@code GET /api/domains/v1/portfolio/{domain}/renewal} is asked and its
+ * {@code expires_at} used. That extra call never fails the list: when it gives no date the domain simply stays
+ * without one, and a real failure (anything but a plain 404) is written to the Log section as a warning.
  */
 @Component
 class HostingerDomainList {
@@ -64,6 +69,7 @@ class HostingerDomainList {
             throw failed(reply, token);
         }
         List<Domain> domains = read(reply, token);
+        fillMissingExpiry(domains, token, refresh);
         domains.sort(BY_EXPIRY);
         return new Domains(List.copyOf(domains), reply.fetchedAt() != null ? reply.fetchedAt() : clock.instant());
     }
@@ -128,6 +134,70 @@ class HostingerDomainList {
                     new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED,
                             "Hostinger sent an answer Dockline could not read."));
         }
+    }
+
+    /** Replaces each named domain that has no expiry date with one carrying the date from its renewal information. */
+    private void fillMissingExpiry(List<Domain> domains, String token, boolean refresh) {
+        for (int i = 0; i < domains.size(); i++) {
+            Domain domain = domains.get(i);
+            if (domain.domain() == null || domain.expiresAt() != null) {
+                continue;
+            }
+            Instant expiresAt;
+            try {
+                expiresAt = renewalExpiry(domain.domain(), token, refresh);
+            } catch (HostingerRateLimitedException e) {
+                // The client already logged the 429; nothing more can be asked for now.
+                return;
+            } catch (RestClientException e) {
+                problemLog.report(LogLevel.WARN, LogSource.HOSTINGER, renewalAction(domain.domain()), null,
+                        "The expiry date of " + domain.domain() + " could not be read: "
+                                + HostingerStatusProvider.unreachable(e).message(),
+                        renewalRequest(domain.domain()), null, e);
+                // Hostinger did not answer: do not make the user wait for every other domain too.
+                return;
+            }
+            if (expiresAt != null) {
+                domains.set(i, new Domain(domain.domain(), expiresAt, domain.status(), domain.type(),
+                        domain.createdAt()));
+            }
+        }
+    }
+
+    /** The domain's expiry date from its renewal information; null (and a Log entry, except for a 404) when there is none. */
+    private Instant renewalExpiry(String domain, String token, boolean refresh) {
+        HostingerClient.Reply reply = client.getDomainRenewal(domain, token, refresh);
+        if (reply.status() == 404) {
+            return null;
+        }
+        String problem;
+        if (reply.tokenRejected()) {
+            problem = "Hostinger rejected the token for this request (HTTP " + reply.status() + ").";
+        } else if (!reply.ok()) {
+            problem = HostingerStatusProvider.failing(reply.status()).message();
+        } else {
+            try {
+                Instant expiresAt = instant(json.readTree(reply.body()).path("expires_at"));
+                if (expiresAt != null) {
+                    return expiresAt;
+                }
+                problem = "Hostinger's renewal information has no expiry date.";
+            } catch (JacksonException | DateTimeParseException e) {
+                problem = "Hostinger's renewal information could not be read (" + e.getMessage() + ").";
+            }
+        }
+        problemLog.report(LogLevel.WARN, LogSource.HOSTINGER, renewalAction(domain), reply.status(),
+                "The expiry date of " + domain + " could not be read: " + problem, renewalRequest(domain),
+                reply.body(), null);
+        return null;
+    }
+
+    private static String renewalAction(String domain) {
+        return "GET " + HostingerClient.domainRenewalPath(domain);
+    }
+
+    private String renewalRequest(String domain) {
+        return "GET " + client.domainRenewalUrl(domain) + " (with the saved token)";
     }
 
     private static String text(JsonNode item, String field) {

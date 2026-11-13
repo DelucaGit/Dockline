@@ -5,6 +5,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -140,6 +141,85 @@ class HostingerDomainsApiTest {
         assertThat(domains.get(4).get("status").asString()).isEqualTo("pending_setup");
         HOSTINGER.verify(1, getRequestedFor(urlPathEqualTo(HostingerStubs.DOMAINS_PATH))
                 .withHeader("Authorization", equalTo("Bearer " + TOKEN)));
+    }
+
+    @Test
+    void aDomainWithoutExpiryGetsItFromTheRenewalEndpointAndIsSortedByIt() throws Exception {
+        tokenStore.save(Source.HOSTINGER, TOKEN);
+        HostingerStubs.domains(HOSTINGER, List.of(
+                HostingerStubs.domain(1, "late.example", "active", "2028-01-01T00:00:00Z"),
+                HostingerStubs.domain(2, "free.example", "active", null),
+                HostingerStubs.domain(3, "soon.example", "active", "2026-12-01T00:00:00Z")));
+        HostingerStubs.domainRenewal(HOSTINGER, "free.example", "2027-03-04T05:06:07Z");
+
+        JsonNode domains = JSON.readTree(send("GET", PATH).body()).get("domains");
+
+        assertThat(domains.valueStream().map(d -> d.get("domain").asString()))
+                .containsExactly("soon.example", "free.example", "late.example");
+        assertThat(domains.get(1).get("expiresAt").asString()).isEqualTo("2027-03-04T05:06:07Z");
+        HOSTINGER.verify(1, getRequestedFor(urlPathEqualTo(HostingerStubs.domainRenewalPath("free.example")))
+                .withHeader("Authorization", equalTo("Bearer " + TOKEN)));
+        assertThat(JSON.readTree(send("GET", "/api/log").body())).isEmpty();
+    }
+
+    @Test
+    void domainsWithADateAndUnclaimedRowsAreNotAskedAbout() throws Exception {
+        tokenStore.save(Source.HOSTINGER, TOKEN);
+        HostingerStubs.domains(HOSTINGER, List.of(
+                HostingerStubs.domain(1, "dated.example", "active", "2028-01-01T00:00:00Z"),
+                HostingerStubs.domain(2, null, "requested", null)));
+
+        JsonNode domains = JSON.readTree(send("GET", PATH).body()).get("domains");
+
+        assertThat(domains).hasSize(2);
+        assertThat(domains.get(1).get("expiresAt").isNull()).isTrue();
+        assertThat(HOSTINGER.findAll(anyRequestedFor(anyUrl()))).hasSize(1);
+        HOSTINGER.verify(0, getRequestedFor(urlPathMatching(HostingerStubs.DOMAINS_PATH + "/.*")));
+    }
+
+    @Test
+    void aFailingRenewalCallLeavesTheListWorkingAndIsLogged() throws Exception {
+        tokenStore.save(Source.HOSTINGER, TOKEN);
+        HostingerStubs.domains(HOSTINGER, List.of(
+                HostingerStubs.domain(1, "broken.example", "active", null),
+                HostingerStubs.domain(2, "dated.example", "active", "2028-01-01T00:00:00Z"),
+                HostingerStubs.domain(3, "free.example", "active", null)));
+        HostingerStubs.domainRenewalServerError(HOSTINGER, "broken.example");
+        HostingerStubs.domainRenewal(HOSTINGER, "free.example", "2027-03-04T05:06:07Z");
+
+        HttpResponse<String> response = send("GET", PATH);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode domains = JSON.readTree(response.body()).get("domains");
+        assertThat(domains.valueStream().map(d -> d.get("domain").asString()))
+                .containsExactly("free.example", "dated.example", "broken.example");
+        assertThat(domains.get(2).get("expiresAt").isNull()).isTrue();
+        JsonNode entry = onlyLogEntry();
+        assertThat(entry.get("level").asString()).isEqualTo("WARN");
+        assertThat(entry.get("action").asString()).isEqualTo("GET /api/domains/v1/portfolio/broken.example/renewal");
+        assertThat(entry.get("statusCode").asInt()).isEqualTo(500);
+        assertThat(entry.get("message").asString()).contains("broken.example");
+        assertThat(entry.get("context").get("response").asString()).contains("Server Error");
+    }
+
+    @Test
+    void aRenewalAnswerIsReusedLongerThanTheListAndTheDomainNameIsUrlEncoded() throws Exception {
+        tokenStore.save(Source.HOSTINGER, TOKEN);
+        HostingerStubs.domains(HOSTINGER, List.of(HostingerStubs.domain(1, "odd name/x.example", "active", null)));
+        HostingerStubs.domainRenewal(HOSTINGER, "odd%20name%2Fx.example", "2027-03-04T05:06:07Z");
+
+        send("GET", PATH);
+        clock.advanceSeconds(120);
+        JsonNode domains = JSON.readTree(send("GET", PATH).body()).get("domains");
+
+        assertThat(domains.get(0).get("expiresAt").asString()).isEqualTo("2027-03-04T05:06:07Z");
+        assertThat(HOSTINGER.findAll(getRequestedFor(urlPathEqualTo(HostingerStubs.DOMAINS_PATH)))).hasSize(2);
+        assertThat(HOSTINGER.findAll(getRequestedFor(urlPathMatching(HostingerStubs.DOMAINS_PATH + "/.*"))))
+                .singleElement().satisfies(request -> assertThat(request.getUrl())
+                        .isEqualTo(HostingerStubs.DOMAINS_PATH + "/odd%20name%2Fx.example/renewal"));
+
+        send("GET", PATH + "?refresh=true");
+        assertThat(HOSTINGER.findAll(getRequestedFor(urlPathMatching(HostingerStubs.DOMAINS_PATH + "/.*")))).hasSize(2);
     }
 
     @Test

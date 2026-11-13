@@ -4,6 +4,7 @@ import io.github.delucagit.dockline.ExternalApiProperties;
 import io.github.delucagit.dockline.log.LogLevel;
 import io.github.delucagit.dockline.log.LogSource;
 import io.github.delucagit.dockline.log.ProblemLog;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -22,12 +23,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.util.UriUtils;
 
 /**
  * The raw HTTP calls to the Hostinger public API (bearer token, see developers.hostinger.com).
  * Every Hostinger call goes through {@link #send}, so every feature shares one request cap
  * ({@link HostingerRateLimiter}: 50 a minute, extra requests wait) and data reads share one cache
- * ({@link HostingerResponseCache}: 60 seconds, {@link #GIT_TTL} for a website's Git connection). Every answer comes back as a {@link Reply}, whatever its status; only network
+ * ({@link HostingerResponseCache}: 60 seconds, {@link #GIT_TTL} for a website's Git connection,
+ * {@link #RENEWAL_TTL} for a domain's renewal information). Every answer comes back as a {@link Reply}, whatever its status; only network
  * failures (no answer at all, including timeouts, or the cap staying full) throw {@link RestClientException}.
  *
  * <p>Hostinger's own "too many requests" (429) is handled here for every feature: the wait from its
@@ -60,6 +63,11 @@ class HostingerClient {
      * Git settings in hPanel, and asking costs up to two requests per website.
      */
     static final Duration GIT_TTL = Duration.ofMinutes(5);
+    /**
+     * How long an answer about a domain's renewal (its expiry date) is reused: the date changes only when the
+     * domain is renewed, and asking costs one request per domain.
+     */
+    static final Duration RENEWAL_TTL = Duration.ofMinutes(5);
     /** The largest page Hostinger allows for the website list. */
     static final int WEBSITES_PER_PAGE = 100;
     /** The first request plus up to two retries after Hostinger's 429. */
@@ -150,6 +158,29 @@ class HostingerClient {
         return hostinger.apiUrl() + DOMAINS_PATH;
     }
 
+    /** The renewal information of one domain (expiry date, grace and redemption periods); the name is URL-encoded. */
+    static String domainRenewalPath(String domain) {
+        return DOMAINS_PATH + "/" + UriUtils.encodePathSegment(domain, StandardCharsets.UTF_8) + "/renewal";
+    }
+
+    /**
+     * The renewal information of one domain, read for its {@code expires_at} when the portfolio has none
+     * (a free domain). A successful answer younger than {@link #RENEWAL_TTL} is reused; {@code refresh} skips it
+     * and saves the new answer. A 404 ("no renewal information for this domain") is kept the same way.
+     */
+    Reply getDomainRenewal(String domain, String token, boolean refresh) {
+        String path = domainRenewalPath(domain);
+        Reply reply = cachedGet(hostinger.apiUrl() + path, path, token, refresh, RENEWAL_TTL);
+        if (reply.status() == 404) {
+            cache.putAny("GET", hostinger.apiUrl() + path, token, reply);
+        }
+        return reply;
+    }
+
+    String domainRenewalUrl(String domain) {
+        return hostinger.apiUrl() + domainRenewalPath(domain);
+    }
+
     /** The Git repositories linked to directories of the website (hPanel's Git section); a JSON array. */
     static String gitRepositoriesPath(String username, String domain) {
         return "/api/hosting/v1/accounts/" + username + "/websites/" + domain + "/git/repositories";
@@ -238,7 +269,8 @@ class HostingerClient {
 
     private Reply exchange(String url, String token) {
         sent.incrementAndGet();
-        return http.get().uri(url)
+        // A ready-made URI: the address is sent as written, so an encoded domain name is not encoded twice.
+        return http.get().uri(URI.create(url))
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .accept(MediaType.APPLICATION_JSON)
                 .exchange((request, response) -> new Reply(response.getStatusCode().value(), response.getHeaders(),
