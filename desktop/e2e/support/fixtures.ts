@@ -43,10 +43,13 @@ export const test = base.extend<Fixtures>({
       delete appEnv['ELECTRON_RUN_AS_NODE']
       // Backend log files go to a fresh temporary folder, never the real app-data folder.
       const logDir = mkdtempSync(join(tmpdir(), 'dockline-e2e-logs-'))
+      // The same goes for the settings file (manual site–repo links). A test that restarts the app
+      // passes its own DOCKLINE_SETTINGS_DIR to both launches so the settings survive.
+      const settingsDir = mkdtempSync(join(tmpdir(), 'dockline-e2e-settings-'))
       const app = await electron.launch({
         args: [DESKTOP_DIR],
         cwd: DESKTOP_DIR,
-        env: { ...appEnv, ...NO_REAL_APIS, DOCKLINE_LOG_DIR: logDir, ...env }
+        env: { ...appEnv, ...NO_REAL_APIS, DOCKLINE_LOG_DIR: logDir, DOCKLINE_SETTINGS_DIR: settingsDir, ...env }
       })
       apps.push(app)
       return { app, window: await app.firstWindow() }

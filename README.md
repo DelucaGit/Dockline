@@ -111,6 +111,29 @@ GitHub and Hostinger tokens are kept in **Windows Credential Manager** (service 
 
 `GET /api/status` returns `{"sources":[{"source":"GITHUB","state":"NOT_CONNECTED","message":null}, ...]}` with one entry per source; `state` is `CONNECTED`, `LIMITED`, `ERROR` or `NOT_CONNECTED`. For Hostinger a stored token means `CONNECTED` for now; a `SourceStatusProvider` bean can work out the real state of a source. GitHub has one (see below).
 
+### Settings file and manual site–repo links
+
+Settings that are not secrets live in one JSON file, `settings.json`, in `%APPDATA%\Dockline` on Windows (`~/.local/share/Dockline` elsewhere). Change the folder with `--dockline.settings.dir=...` or `DOCKLINE_SETTINGS_DIR`; backend tests and the end-to-end tests point it at a temporary folder, so they never touch the real file. Today it holds the manual links between a site and its GitHub repository (one repository per site):
+
+```json
+{
+  "version": 1,
+  "siteRepoLinks": {
+    "example.com": "owner/name"
+  }
+}
+```
+
+Backend code uses the `SiteRepoLinkRepository` interface (`find(domain)`, `findAll()`, `save(domain, repoFullName)`, `remove(domain)`; domains are compared in lower case), so a database could replace the file later. `JsonFileSiteRepoLinkRepository` stores the links through `SettingsFile`, which owns the file:
+
+- **Version.** `"version"` is the file format (`SettingsFile.CURRENT_VERSION`, now `1`). An older file is upgraded step by step when it is read (`SettingsFile.UPGRADES`, one step per version; empty until the format first changes) and saved in the new format. Properties this version does not know are kept.
+- **Safe writes.** Every change is written to `settings.json.tmp`, flushed to disk and then moved over `settings.json` in one atomic step, so a crash never leaves a half-written file. If saving fails, `SettingsUnavailableException` is thrown and nothing changes, on disk or in memory.
+- **Missing file.** The app starts with no links; the file is created by the first change.
+- **Unusable file** (not JSON, no valid `version`, or written by a newer Dockline). The app starts with no links, the file is kept as `settings.corrupt-<UTC time>.json` in the same folder, and a `WARN` from `BACKEND` (action `Read settings file`) appears in the Log section.
+- The file is read once at start-up; all access is thread-safe.
+
+There are no REST endpoints for the links yet. Tests: `SettingsFileTest`, `JsonFileSiteRepoLinkRepositoryTest` and `SettingsFileStartupTest`.
+
 ### Connecting to GitHub
 
 GitHub uses the **device flow**: the app shows a short code, the user enters it on GitHub and approves, and the backend receives the token and saves it. The token never passes through the frontend. It needs the Client ID of the Dockline OAuth App: `dockline.github.client-id` / `DOCKLINE_GITHUB_CLIENT_ID` (empty by default; see [docs/github-oauth-app-setup.md](docs/github-oauth-app-setup.md)). Without it, starting the flow answers `400` with the problem detail "GitHub client ID is not configured ...", and the GitHub status is `NOT_CONNECTED` with the same message.
