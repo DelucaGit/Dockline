@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, useNavigate } from 'react-router-dom'
+import { recheckHostinger } from '@/api/hostinger'
 import { fetchStatus, recheckGithub, statusKey, type ConnectionState } from '@/api/github'
 import { cn } from '@/lib/utils'
 import { strings } from '@/strings'
@@ -31,9 +32,9 @@ export function Connections({ baseUrl }: { baseUrl: string }) {
   // directly so a revoked token shows up at once.
   useEffect(() => {
     const onFocus = () => {
-      recheckGithub(baseUrl)
-        .catch(() => {})
-        .finally(() => void queryClient.invalidateQueries({ queryKey: statusKey(baseUrl) }))
+      Promise.allSettled([recheckGithub(baseUrl), recheckHostinger(baseUrl)]).then(
+        () => void queryClient.invalidateQueries({ queryKey: statusKey(baseUrl) })
+      )
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
@@ -49,7 +50,8 @@ export function Connections({ baseUrl }: { baseUrl: string }) {
       <h2 className="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">{strings.connections.heading}</h2>
       {entries.map(({ source, label }) => {
         const state: Shown = data?.sources.find((s) => s.source === source)?.state ?? 'UNKNOWN'
-        const text = strings.connections.state[state]
+        const text =
+          source === 'HOSTINGER' && state === 'ERROR' ? strings.connections.hostingerError : strings.connections.state[state]
         return (
           <div key={source} className="flex items-center">
             <NavLink
@@ -71,6 +73,16 @@ export function Connections({ baseUrl }: { baseUrl: string }) {
               onClick={() => navigate('/settings', { state: { reconnect: true } })}
             >
               {strings.connections.reconnect}
+            </button>
+          )}
+          {source === 'HOSTINGER' && state === 'ERROR' && (
+            <button
+              type="button"
+              className="mr-2 rounded-md px-2 py-1 text-xs font-medium underline hover:bg-accent"
+              aria-label={strings.connections.replaceTokenLabel}
+              onClick={() => navigate('/settings', { state: { replaceToken: true } })}
+            >
+              {strings.connections.replaceToken}
             </button>
           )}
           </div>
