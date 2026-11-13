@@ -109,7 +109,22 @@ The renderer talks to the main process only through the small `window.dockline` 
 
 GitHub and Hostinger tokens are kept in **Windows Credential Manager** (service name `Dockline`, one entry per source), so they survive restarts and never end up in files, logs or API responses; every stored token is also registered with `SecretMasker`. Backend code uses the `TokenStore` interface (`save` / `read` / `delete` per source). `dockline.token-store` (or `DOCKLINE_TOKEN_STORE`) chooses the store: `credential-manager` (default) or `memory` (forgotten on exit). Backend tests and end-to-end tests always use `memory`. If Credential Manager cannot be opened, the app still starts and reports an error in the Log section.
 
-`GET /api/status` returns `{"sources":[{"source":"GITHUB","state":"NOT_CONNECTED","message":null}, ...]}` with one entry per source; `state` is `CONNECTED`, `LIMITED`, `ERROR` or `NOT_CONNECTED`. For now a stored token means `CONNECTED`; a `SourceStatusProvider` bean can work out the real state of a source.
+`GET /api/status` returns `{"sources":[{"source":"GITHUB","state":"NOT_CONNECTED","message":null}, ...]}` with one entry per source; `state` is `CONNECTED`, `LIMITED`, `ERROR` or `NOT_CONNECTED`. For Hostinger a stored token means `CONNECTED` for now; a `SourceStatusProvider` bean can work out the real state of a source. GitHub has one (see below).
+
+### Connecting to GitHub
+
+GitHub uses the **device flow**: the app shows a short code, the user enters it on GitHub and approves, and the backend receives the token and saves it. The token never passes through the frontend. It needs the Client ID of the Dockline OAuth App: `dockline.github.client-id` / `DOCKLINE_GITHUB_CLIENT_ID` (empty by default; see [docs/github-oauth-app-setup.md](docs/github-oauth-app-setup.md)). Without it, starting the flow answers `400` with the problem detail "GitHub client ID is not configured ...", and the GitHub status is `NOT_CONNECTED` with the same message.
+
+| Endpoint | What it does |
+|---|---|
+| `POST /api/github/connect` | Starts connecting (replacing any attempt already running). Answers `{userCode, verificationUri, expiresInSeconds, intervalSeconds}`; `400`/`502` problem responses when it cannot start. |
+| `POST /api/github/connect/poll` | Has the user approved yet? Answers `{state, intervalSeconds, message}`, `state` = `NOT_STARTED`, `PENDING`, `CONNECTED`, `DENIED`, `EXPIRED` or `ERROR`. Safe to call every few seconds: GitHub is only asked once its interval has passed (it grows by 5 s when GitHub says `slow_down`). On `CONNECTED` the token is saved. |
+| `POST /api/github/disconnect` | Deletes the token and stops any attempt (`204`). |
+| `POST /api/github/recheck` | Checks the saved token with GitHub now and answers its `SourceStatus`. |
+
+`GET /api/status` checks the saved GitHub token with `GET /user` at most once a minute (connect, disconnect and recheck skip the wait): `200` = `CONNECTED` ("Connected as LOGIN"), `401` = `ERROR` (revoked or expired, reconnect; also written to the Log section), `403`/`429` (rate limit) = `LIMITED`, and GitHub unreachable or failing = `LIMITED` (the token may be fine, so the app does not ask to reconnect). Time-dependent code uses a `Clock` bean that tests replace with `MutableClock`.
+
+**Fake GitHub in tests.** Backend tests use `GithubStubs` (backend test sources) and end-to-end tests `desktop/e2e/support/githubStubs.ts` (`githubEnv`, `stubDeviceCode`, `stubTokenPending`, `stubTokenSlowDown`, `stubTokenDenied`, `stubTokenExpired`, `stubTokenSuccess`, `stubTokenError`, `stubUser`, `stubUserUnauthorized`, `stubUserRateLimited`), both on WireMock.
 
 ## End-to-end tests
 

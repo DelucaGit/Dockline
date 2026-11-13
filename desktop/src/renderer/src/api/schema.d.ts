@@ -4,6 +4,86 @@
  */
 
 export interface paths {
+    "/api/github/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check the saved token with GitHub now, skipping the cache
+         * @description GET /api/status re-checks the token at most once a minute; this forces a check.
+         */
+        post: operations["recheckGithub"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/github/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove the GitHub token from Dockline
+         * @description Also stops a running connection attempt. Afterwards GITHUB is NOT_CONNECTED.
+         */
+        post: operations["disconnectGithub"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/github/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start connecting: get a code for the user to enter on GitHub
+         * @description Replaces any connection attempt already running.
+         */
+        post: operations["startGithubConnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/github/connect/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Has the user approved yet?
+         * @description Safe to call every few seconds: GitHub is only asked when its polling interval allows. On CONNECTED the token is saved and GET /api/status shows GITHUB as CONNECTED.
+         */
+        post: operations["pollGithubConnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/status": {
         parameters: {
             query?: never;
@@ -54,9 +134,63 @@ export interface components {
         SourceStatus: {
             source: components["schemas"]["Source"];
             state: components["schemas"]["ConnectionState"];
-            /** @description Why the state is what it is, for LIMITED and ERROR; never contains a token */
+            /** @description Why the state is what it is (always for LIMITED and ERROR; may be set otherwise, e.g. 'Connected as octocat'); never contains a token */
             message?: string | null;
         };
+        ProblemDetail: {
+            /** Format: uri */
+            type?: string;
+            title?: string;
+            /** Format: int32 */
+            status?: number;
+            detail?: string;
+            /** Format: uri */
+            instance?: string;
+            properties?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description Show userCode and open verificationUri; then poll every intervalSeconds */
+        GithubDeviceCode: {
+            /**
+             * @description Short code the user types on GitHub's page
+             * @example WDJB-MJHT
+             */
+            userCode: string;
+            /**
+             * @description Page to open in the browser
+             * @example https://github.com/login/device
+             */
+            verificationUri: string;
+            /**
+             * Format: int64
+             * @description Seconds until the code expires
+             * @example 900
+             */
+            expiresInSeconds: number;
+            /**
+             * Format: int64
+             * @description Poll POST /api/github/connect/poll no more often than this
+             * @example 5
+             */
+            intervalSeconds: number;
+        };
+        /** @description Result of checking whether the user has approved yet */
+        GithubConnectProgress: {
+            state: components["schemas"]["GithubConnectState"];
+            /**
+             * Format: int64
+             * @description For PENDING: seconds to wait before polling again (grows by 5 when GitHub asks Dockline to slow down)
+             */
+            intervalSeconds?: number | null;
+            /** @description For DENIED, EXPIRED and ERROR: what happened, for the user */
+            message?: string | null;
+        };
+        /**
+         * @description NOT_STARTED: no connection attempt since the app started (or since disconnect). PENDING: waiting for the user to approve on GitHub; poll again after intervalSeconds. CONNECTED: approved; the token is saved. DENIED: the user clicked Cancel on GitHub; start again to retry. EXPIRED: the code expired before it was approved; start again to retry. ERROR: something else went wrong, see message; start again to retry.
+         * @enum {string}
+         */
+        GithubConnectState: "NOT_STARTED" | "PENDING" | "CONNECTED" | "DENIED" | "EXPIRED" | "ERROR";
         StatusResponse: {
             sources: components["schemas"]["SourceStatus"][];
         };
@@ -107,6 +241,102 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    recheckGithub: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceStatus"];
+                };
+            };
+        };
+    };
+    disconnectGithub: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    startGithubConnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Code to show */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubDeviceCode"];
+                };
+            };
+            /** @description GitHub client ID is not configured */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description GitHub could not be reached or refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    pollGithubConnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubConnectProgress"];
+                };
+            };
+        };
+    };
     getStatus: {
         parameters: {
             query?: never;
