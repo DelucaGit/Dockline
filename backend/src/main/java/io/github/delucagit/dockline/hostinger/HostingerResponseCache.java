@@ -12,8 +12,8 @@ import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 /**
- * Successful Hostinger answers, kept in memory for {@link #TTL} so repeated views reuse them instead of asking
- * Hostinger again. Keyed by method, URL and a SHA-256 hash of the token (the token itself is never kept here),
+ * Successful Hostinger answers, kept in memory for {@link #TTL} (or longer when the reader asks for it, see
+ * {@link #get(String, String, String, Duration)}) so repeated views reuse them instead of asking Hostinger again. Keyed by method, URL and a SHA-256 hash of the token (the token itself is never kept here),
  * so another token never sees these answers; saving or removing the token also clears everything. Holds at most
  * {@link #MAX_ENTRIES} answers (oldest dropped first). Errors are never stored. Thread-safe.
  */
@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 class HostingerResponseCache {
 
     static final Duration TTL = Duration.ofSeconds(60);
-    static final int MAX_ENTRIES = 100;
+    static final int MAX_ENTRIES = 500;
 
     private final Clock clock;
 
@@ -39,12 +39,17 @@ class HostingerResponseCache {
 
     /** The saved answer for this request, if there is one younger than {@link #TTL}. */
     synchronized Optional<HostingerClient.Reply> get(String method, String url, String token) {
+        return get(method, url, token, TTL);
+    }
+
+    /** The saved answer for this request, if there is one younger than {@code ttl} (for data that changes rarely). */
+    synchronized Optional<HostingerClient.Reply> get(String method, String url, String token, Duration ttl) {
         String key = key(method, url, token);
         HostingerClient.Reply reply = replies.get(key);
         if (reply == null) {
             return Optional.empty();
         }
-        if (!clock.instant().isBefore(reply.fetchedAt().plus(TTL))) {
+        if (!clock.instant().isBefore(reply.fetchedAt().plus(ttl))) {
             replies.remove(key);
             return Optional.empty();
         }

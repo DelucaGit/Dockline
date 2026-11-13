@@ -99,6 +99,19 @@ class GithubClient {
         return getApi(URI.create(repositoriesUrl()), token);
     }
 
+    /** One repository, {@code GET /repos/{owner}/{repo}}. {@code fullName} must be a checked {@code owner/name}. */
+    String repositoryUrl(String fullName) {
+        return github.apiUrl() + "/repos/" + fullName;
+    }
+
+    /**
+     * One repository by full name: 200 when the token can see it, 404 when it does not exist or is hidden from
+     * the token, 403 when access is refused, 301 when it was renamed or moved (redirects are not followed).
+     */
+    Reply getRepository(String fullName, String token) {
+        return getApi(URI.create(repositoryUrl(fullName)), token);
+    }
+
     /**
      * A further page, from the {@code next} link of the page before. Refuses (with {@link IllegalArgumentException})
      * any address outside the configured GitHub API, so the token is never sent to another host.

@@ -4,6 +4,30 @@
  */
 
 export interface paths {
+    "/api/sites/{domain}/repo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Link a site to a GitHub repository by hand (or change the link)
+         * @description Saves the link in the settings file, replacing an earlier manual link of the site, and answers like GET /api/sites/{domain}. Refused when the site is Git-connected in Hostinger (SITE_GIT_CONNECTED): that connection always wins. Hostinger is asked afresh for this, so when Hostinger cannot be asked nothing is saved and the usual HOSTINGER_* problem is answered. GitHub is not needed: a repository that does not exist is saved and comes back with a `repoWarning`.
+         */
+        put: operations["linkSiteRepo"];
+        post?: never;
+        /**
+         * Remove a site's manual link
+         * @description Does nothing when the site has no manual link. Needs neither Hostinger nor GitHub. A Hostinger Git connection is not touched (change that in hPanel).
+         */
+        delete: operations["unlinkSiteRepo"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/hostinger/token": {
         parameters: {
             query?: never;
@@ -145,6 +169,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/{domain}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One site and its linked GitHub repository
+         * @description The repository comes from Hostinger's Git settings of the site (source HOSTINGER; this always wins, and a saved manual link is then not shown), else from the manual link (MANUAL), else there is none (NONE). The repository is checked with GitHub: one that is missing or not accessible gives a `repoWarning`, not an error. A source that cannot be asked does not fail the request: it adds an entry to `problems` (codes HOSTINGER_NOT_CONNECTED, HOSTINGER_TOKEN_REJECTED, HOSTINGER_RATE_LIMITED, HOSTINGER_UNAVAILABLE, GITHUB_NOT_CONNECTED, GITHUB_TOKEN_REJECTED, GITHUB_RATE_LIMITED, GITHUB_UNAVAILABLE). Without Hostinger (`hostingerChecked` false) the answer comes from the saved manual links alone; without GitHub the repository is shown unchecked. Hostinger's answer about the site is kept for five minutes.
+         */
+        get: operations["getSite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sites/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The linked repository of every site, for the Sites list
+         * @description Always answers 200. For each Hostinger website with a domain: the repository from Hostinger's Git settings (source HOSTINGER), else the manual link (MANUAL), else NONE. GitHub is not asked. Asking Hostinger costs one or two requests per site, so the answers are kept for five minutes, and one call asks about at most 40 requests' worth of sites: with more sites than that, the rest have `hostingerChecked` false (`complete` false) and are filled in by a later call. When Hostinger cannot be asked (not connected, rejected token, rate limit, outage) `problems` holds one HOSTINGER entry with the usual HOSTINGER_* code, and the saved manual links are still returned.
+         */
+        get: operations["listSiteLinks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/log": {
         parameters: {
             query?: never;
@@ -227,10 +291,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description A Hostinger API token created in hPanel */
-        HostingerTokenRequest: {
-            /** @description The API token; surrounding whitespace is ignored */
-            token: string;
+        /** @description The repository to link a site to */
+        SiteRepoRequest: {
+            /**
+             * @description GitHub full name, owner/name; surrounding whitespace is ignored
+             * @example octocat/my-site
+             */
+            repoFullName: string;
         };
         ProblemDetail: {
             /** Format: uri */
@@ -245,13 +312,81 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** @description One site and the GitHub repository linked to it */
+        SiteDetail: {
+            /**
+             * @description The site's domain, lower case
+             * @example example.com
+             */
+            domain: string;
+            /** @description The linked repository; null when source is NONE */
+            repo: components["schemas"]["SiteRepo"];
+            source: components["schemas"]["SiteLinkSource"];
+            /** @description False when Hostinger could not be asked whether the site is Git-connected (see problems): source is then MANUAL or NONE from the saved manual links alone */
+            hostingerChecked: boolean;
+            /** @description Set when GitHub says the linked repository is missing or not accessible; null when it is fine, when there is no repository, or when GitHub could not be asked (see problems) */
+            repoWarning: components["schemas"]["SiteRepoWarning"];
+            /** @description At most one entry per source that could not be asked; empty when both answered */
+            problems: components["schemas"]["SiteSourceProblem"][];
+        };
+        /**
+         * @description Where a site's repository link comes from. HOSTINGER: the site is Git-connected in Hostinger (hPanel's Git section or Git auto-deployment); this always wins and cannot be changed in Dockline. MANUAL: linked by the user in Dockline (saved in the settings file). NONE: no repository is linked.
+         * @enum {string}
+         */
+        SiteLinkSource: "HOSTINGER" | "MANUAL" | "NONE";
+        /** @description The GitHub repository linked to a site */
+        SiteRepo: {
+            /**
+             * @description owner/name
+             * @example octocat/my-site
+             */
+            fullName: string;
+            /**
+             * @description The repository's page on GitHub
+             * @example https://github.com/octocat/my-site
+             */
+            htmlUrl: string;
+        };
+        /** @description The linked repository is missing or not accessible on GitHub; the link itself is kept */
+        SiteRepoWarning: {
+            code: components["schemas"]["SiteRepoWarningCode"];
+            /** @description For the user */
+            message: string;
+        };
+        /**
+         * @description REPO_NOT_FOUND: GitHub does not know the repository (deleted, renamed away, or private and not visible to the connected GitHub user). REPO_NOT_ACCESSIBLE: GitHub refuses access to it. REPO_MOVED: it was renamed or transferred.
+         * @enum {string}
+         */
+        SiteRepoWarningCode: "REPO_NOT_FOUND" | "REPO_NOT_ACCESSIBLE" | "REPO_MOVED";
+        /** @description One source (Hostinger or GitHub) could not be asked; the rest of the answer is still valid */
+        SiteSourceProblem: {
+            source: components["schemas"]["Source"];
+            /**
+             * @description The same stable codes as the problem responses of the list endpoints: HOSTINGER_NOT_CONNECTED, HOSTINGER_TOKEN_REJECTED, HOSTINGER_RATE_LIMITED, HOSTINGER_UNAVAILABLE, GITHUB_NOT_CONNECTED, GITHUB_TOKEN_REJECTED, GITHUB_RATE_LIMITED, GITHUB_UNAVAILABLE
+             * @example GITHUB_NOT_CONNECTED
+             */
+            code: string;
+            /** @description For the user */
+            message: string;
+            /**
+             * Format: int64
+             * @description For the RATE_LIMITED codes: seconds to wait, when known; otherwise null
+             * @example 42
+             */
+            retryAfterSeconds: number | null;
+        };
+        /** @enum {string} */
+        Source: "GITHUB" | "HOSTINGER";
+        /** @description A Hostinger API token created in hPanel */
+        HostingerTokenRequest: {
+            /** @description The API token; surrounding whitespace is ignored */
+            token: string;
+        };
         /**
          * @description CONNECTED: a token is stored and works (green). LIMITED: works, but not fully, e.g. missing permissions or rate-limited (yellow). ERROR: a token is stored but cannot be used, e.g. revoked, or the token store is unavailable (red). NOT_CONNECTED: no token is stored (red).
          * @enum {string}
          */
         ConnectionState: "CONNECTED" | "LIMITED" | "ERROR" | "NOT_CONNECTED";
-        /** @enum {string} */
-        Source: "GITHUB" | "HOSTINGER";
         /** @description Connection state of one source */
         SourceStatus: {
             source: components["schemas"]["Source"];
@@ -308,6 +443,28 @@ export interface components {
         GithubConnectState: "NOT_STARTED" | "PENDING" | "CONNECTED" | "DENIED" | "EXPIRED" | "ERROR";
         StatusResponse: {
             sources: components["schemas"]["SourceStatus"][];
+        };
+        /** @description One site's repository link, for the Sites list */
+        SiteLink: {
+            /**
+             * @description The site's domain, lower case
+             * @example example.com
+             */
+            domain: string;
+            /** @description The linked repository; null when source is NONE */
+            repo: components["schemas"]["SiteRepo"];
+            source: components["schemas"]["SiteLinkSource"];
+            /** @description False when Hostinger was not asked about this site in this call: source is then MANUAL or NONE from the saved manual links alone, and a later call fills it in */
+            hostingerChecked: boolean;
+        };
+        /** @description The repository link of every site, for the Sites list */
+        SiteLinks: {
+            /** @description One entry per Hostinger website that has a domain, sorted by domain; when Hostinger could not list the websites, one entry per saved manual link instead */
+            links: components["schemas"]["SiteLink"][];
+            /** @description True when every entry has hostingerChecked true */
+            complete: boolean;
+            /** @description Set when Hostinger could not be asked (GitHub is never asked for this list); empty otherwise */
+            problems: components["schemas"]["SiteSourceProblem"][];
         };
         /** @enum {string} */
         LogSource: "GITHUB" | "HOSTINGER" | "BACKEND";
@@ -491,6 +648,117 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    linkSiteRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The site's domain, e.g. example.com (case does not matter) */
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteRepoRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved; the site with its new link (source MANUAL) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDetail"];
+                };
+            };
+            /** @description code INVALID_REPOSITORY: repoFullName is missing or not owner/name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code SITE_NOT_FOUND: Hostinger has no website with this domain */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code SITE_GIT_CONNECTED: the site is Git-connected in Hostinger, a manual link cannot be set; code HOSTINGER_NOT_CONNECTED: no Hostinger token saved; code HOSTINGER_TOKEN_REJECTED: Hostinger rejected the saved token */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code HOSTINGER_RATE_LIMITED: Hostinger's rate limit is reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code SETTINGS_UNAVAILABLE: the settings file could not be written */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code HOSTINGER_UNAVAILABLE: Hostinger could not be reached, timed out, failed or answered unexpectedly */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    unlinkSiteRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The site's domain, e.g. example.com (case does not matter) */
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed (or there was none) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description code SETTINGS_UNAVAILABLE: the settings file could not be written */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     saveHostingerToken: {
         parameters: {
             query?: never;
@@ -701,6 +969,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+        };
+    };
+    getSite: {
+        parameters: {
+            query?: {
+                /** @description True asks Hostinger again about this site's Git connection instead of using the answer saved in the last five minutes (one or two Hostinger requests) */
+                refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description The site's domain, e.g. example.com (case does not matter) */
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The site */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDetail"];
+                };
+            };
+            /** @description code SITE_NOT_FOUND: Hostinger has no website with this domain */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    listSiteLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The links, sorted by domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteLinks"];
                 };
             };
         };

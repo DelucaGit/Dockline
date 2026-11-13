@@ -22,6 +22,9 @@ import java.util.List;
  * For {@code GET /user/repos}, {@link #repos} serves several pages linked with absolute {@code Link} headers,
  * as GitHub does; build the items with {@link #repo}.
  *
+ * For {@code GET /repos/{owner}/{repo}} (is a linked repository still there?): {@link #repository} (found),
+ * {@link #repositoryNotFound} (404) and {@link #repositoryError} (any other status).
+ *
  * <p>A later stub for the same endpoint wins, so a test can change GitHub's answer between two polls.
  */
 public final class GithubStubs {
@@ -136,6 +139,30 @@ public final class GithubStubs {
     public static void reposWithForeignNextLink(WireMockServer github, String foreignUrl, List<String> items) {
         github.stubFor(get(urlPathEqualTo(REPOS_PATH)).willReturn(okJson("[" + String.join(",", items) + "]")
                 .withHeader("Link", "<" + foreignUrl + ">; rel=\"next\"")));
+    }
+
+    public static String repositoryPath(String owner, String name) {
+        return "/repos/" + owner + "/" + name;
+    }
+
+    /** {@code GET /repos/{owner}/{name}} finds the repository. */
+    public static void repository(WireMockServer github, String owner, String name) {
+        github.stubFor(get(urlPathEqualTo(repositoryPath(owner, name)))
+                .willReturn(okJson(repo(owner, name, false, "2026-01-01T00:00:00Z"))));
+    }
+
+    /** {@code GET /repos/{owner}/{name}} answers 404: deleted, or private and hidden from the user. */
+    public static void repositoryNotFound(WireMockServer github, String owner, String name) {
+        repositoryError(github, owner, name, 404, "Not Found");
+    }
+
+    /** {@code GET /repos/{owner}/{name}} answers with this status, e.g. 403, 401 or 503. */
+    public static void repositoryError(WireMockServer github, String owner, String name, int status, String message) {
+        github.stubFor(get(urlPathEqualTo(repositoryPath(owner, name))).willReturn(aResponse().withStatus(status)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"message":"%s","documentation_url":"https://docs.github.com/rest","status":"%d"}"""
+                        .formatted(message, status))));
     }
 
     /** The token was revoked or has expired. */

@@ -17,6 +17,11 @@ import java.util.List;
  * Dockline uses to check a token, answering the way Hostinger's documentation describes
  * (errors are {@code {"message": ..., "correlation_id": ...}}).
  *
+ * <p>A website's Git connection has fakes for each case: connected by auto-deployment
+ * ({@link #gitAutoDeployment}), connected through a repository cloned in hPanel's Git section
+ * ({@link #gitRepositories}), and not connected ({@link #gitNotConnected}). The shapes follow Hostinger's
+ * OpenAPI document (github.com/hostinger/api, openapi.json).
+ *
  * <p>The same fakes exist for the desktop E2E tests in {@code desktop/e2e/support/hostingerStubs.ts}.
  * A later stub for the same endpoint wins, so a test can change Hostinger's answer between two calls.
  */
@@ -26,7 +31,94 @@ public final class HostingerStubs {
     public static final String WEBSITES_PATH = "/api/hosting/v1/websites";
     public static final String DOMAINS_PATH = "/api/domains/v1/portfolio";
 
+    public static final String GIT_INSTALLATIONS_PATH = "/api/hosting/v1/git/installations";
+    /** The installation every {@link #gitAutoDeployment} fake goes through. */
+    public static final String GIT_INSTALLATION_UUID = "018f5e2a-1234-7890-abcd-1234567890ab";
+
     private HostingerStubs() {}
+
+    public static String gitRepositoriesPath(String username, String domain) {
+        return "/api/hosting/v1/accounts/" + username + "/websites/" + domain + "/git/repositories";
+    }
+
+    public static String gitAutoDeploymentPath(String username, String domain) {
+        return "/api/hosting/v1/accounts/" + username + "/websites/" + domain + "/git/auto-deployments/settings";
+    }
+
+    /**
+     * The website's hPanel Git section lists these clone addresses (the first one in the document root, the
+     * others in {@code dir-1}, {@code dir-2} ...), e.g. {@code git@github.com:octocat/my-site.git} or
+     * {@code https://***@github.com/octocat/my-site.git}. None means an empty list.
+     */
+    public static void gitRepositories(WireMockServer hostinger, String username, String domain, String... repositoryUrls) {
+        List<String> items = new java.util.ArrayList<>();
+        for (int i = 0; i < repositoryUrls.length; i++) {
+            items.add("""
+                    {"repository_url":"%s","branch":"main","directory":"%s","webhook":{\
+                    "url":"https://webhooks.hostinger.com/deploy/6f1ed002ab5595859014ebf0951522d%d","provider":null,\
+                    "setup_url":null,"tutorial_url":null}}""".formatted(repositoryUrls[i], i == 0 ? "" : "dir-" + i, i));
+        }
+        hostinger.stubFor(get(urlPathEqualTo(gitRepositoriesPath(username, domain)))
+                .willReturn(okJson("[" + String.join(",", items) + "]")));
+    }
+
+    /**
+     * The website auto-deploys {@code owner/repository} (branch main, document root) through the installation
+     * {@link #GIT_INSTALLATION_UUID}; add {@link #gitInstallations} to say which provider that is.
+     */
+    public static void gitAutoDeployment(WireMockServer hostinger, String username, String domain, String owner,
+            String repository) {
+        hostinger.stubFor(get(urlPathEqualTo(gitAutoDeploymentPath(username, domain))).willReturn(okJson("""
+                {"installation_uuid":"%s","is_enabled":true,"owner":"%s","repository":"%s","branch":"main",\
+                "directory":""}""".formatted(GIT_INSTALLATION_UUID, owner, repository))));
+    }
+
+    /** The website has no auto-deployment: every field is null, as Hostinger documents. */
+    public static void gitNoAutoDeployment(WireMockServer hostinger, String username, String domain) {
+        hostinger.stubFor(get(urlPathEqualTo(gitAutoDeploymentPath(username, domain))).willReturn(okJson("""
+                {"installation_uuid":null,"is_enabled":null,"owner":null,"repository":null,"branch":null,\
+                "directory":null}""")));
+    }
+
+    /** A website that is not Git-connected at all: no auto-deployment and an empty Git section. */
+    public static void gitNotConnected(WireMockServer hostinger, String username, String domain) {
+        gitNoAutoDeployment(hostinger, username, domain);
+        gitRepositories(hostinger, username, domain);
+    }
+
+    /** The customer's one Git installation ({@link #GIT_INSTALLATION_UUID}); provider github, gitlab or bitbucket. */
+    public static void gitInstallations(WireMockServer hostinger, String provider) {
+        hostinger.stubFor(get(urlPathEqualTo(GIT_INSTALLATIONS_PATH)).willReturn(okJson("""
+                [{"uuid":"%s","provider":"%s","account_login":"octocat","account_type":"User",\
+                "account_avatar_url":null,"status":"active","installed_at":"2026-01-15T10:30:00Z",\
+                "created_at":"2026-01-15T10:00:00Z","has_oauth":true}]""".formatted(GIT_INSTALLATION_UUID, provider))));
+    }
+
+    /** Both Git endpoints of the website answer 500. */
+    public static void gitServerError(WireMockServer hostinger, String username, String domain) {
+        for (String path : List.of(gitAutoDeploymentPath(username, domain), gitRepositoriesPath(username, domain))) {
+            hostinger.stubFor(get(urlPathEqualTo(path)).willReturn(error(500, """
+                    {"message":"Server Error","correlation_id":"c0ffee00-0000-4000-8000-000000000033"}""")));
+        }
+    }
+
+    /** Both Git endpoints of the website answer 401; {@code echo} is put into the body to check that it gets masked. */
+    public static void gitUnauthorized(WireMockServer hostinger, String username, String domain, String echo) {
+        for (String path : List.of(gitAutoDeploymentPath(username, domain), gitRepositoriesPath(username, domain))) {
+            hostinger.stubFor(get(urlPathEqualTo(path)).willReturn(error(401, """
+                    {"message":"Unauthenticated.","correlation_id":"c0ffee00-0000-4000-8000-000000000031","debug":"%s"}"""
+                    .formatted(echo))));
+        }
+    }
+
+    /** Both Git endpoints of the website answer 429 with Retry-After. */
+    public static void gitRateLimited(WireMockServer hostinger, String username, String domain, int retryAfterSeconds) {
+        for (String path : List.of(gitAutoDeploymentPath(username, domain), gitRepositoriesPath(username, domain))) {
+            hostinger.stubFor(get(urlPathEqualTo(path)).willReturn(error(429, """
+                    {"message":"Too Many Attempts.","correlation_id":"c0ffee00-0000-4000-8000-000000000032"}""")
+                    .withHeader("Retry-After", Integer.toString(retryAfterSeconds))));
+        }
+    }
 
     /** A WireMock server on a free localhost port, started. Stop it when done. */
     public static WireMockServer start() {

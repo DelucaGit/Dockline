@@ -13,6 +13,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -25,8 +26,8 @@ import org.springframework.web.client.RestClientException;
 /**
  * The raw HTTP calls to the Hostinger public API (bearer token, see developers.hostinger.com).
  * Every Hostinger call goes through {@link #send}, so every feature shares one request cap
- * ({@link HostingerRateLimiter}: 50 a minute, extra requests wait) and data reads share one 60-second cache
- * ({@link HostingerResponseCache}). Every answer comes back as a {@link Reply}, whatever its status; only network
+ * ({@link HostingerRateLimiter}: 50 a minute, extra requests wait) and data reads share one cache
+ * ({@link HostingerResponseCache}: 60 seconds, {@link #GIT_TTL} for a website's Git connection). Every answer comes back as a {@link Reply}, whatever its status; only network
  * failures (no answer at all, including timeouts, or the cap staying full) throw {@link RestClientException}.
  *
  * <p>Hostinger's own "too many requests" (429) is handled here for every feature: the wait from its
@@ -52,6 +53,13 @@ class HostingerClient {
     static final String WEBSITES_PATH = "/api/hosting/v1/websites";
     /** The domain portfolio: all domains of the user, one unpaged array. */
     static final String DOMAINS_PATH = "/api/domains/v1/portfolio";
+    /** The Git provider accounts (GitHub, GitLab ...) the customer connected to Hostinger; one unpaged array. */
+    static final String GIT_INSTALLATIONS_PATH = "/api/hosting/v1/git/installations";
+    /**
+     * How long an answer about a website's Git connection is reused: it changes only when the user changes the
+     * Git settings in hPanel, and asking costs up to two requests per website.
+     */
+    static final Duration GIT_TTL = Duration.ofMinutes(5);
     /** The largest page Hostinger allows for the website list. */
     static final int WEBSITES_PER_PAGE = 100;
     /** The first request plus up to two retries after Hostinger's 429. */
@@ -68,6 +76,7 @@ class HostingerClient {
     private final Clock clock;
     private final ProblemLog problemLog;
     private final Duration defaultRetryAfter;
+    private final AtomicLong sent = new AtomicLong();
 
     HostingerClient(ExternalApiProperties apis, HostingerRateLimiter limiter, HostingerResponseCache cache,
             Clock clock, ProblemLog problemLog,
@@ -136,6 +145,36 @@ class HostingerClient {
         return hostinger.apiUrl() + DOMAINS_PATH;
     }
 
+    /** The Git repositories linked to directories of the website (hPanel's Git section); a JSON array. */
+    static String gitRepositoriesPath(String username, String domain) {
+        return "/api/hosting/v1/accounts/" + username + "/websites/" + domain + "/git/repositories";
+    }
+
+    /** The website's Git auto-deployment (through Hostinger's GitHub/GitLab app); every field null when not set up. */
+    static String gitAutoDeploymentPath(String username, String domain) {
+        return "/api/hosting/v1/accounts/" + username + "/websites/" + domain + "/git/auto-deployments/settings";
+    }
+
+    /**
+     * A read of one of the Git paths above ({@link #gitRepositoriesPath}, {@link #gitAutoDeploymentPath},
+     * {@link #GIT_INSTALLATIONS_PATH}). A successful answer younger than {@link #GIT_TTL} is reused;
+     * {@code refresh} skips it and saves the new answer. The caller makes sure the path holds no characters
+     * that need encoding.
+     */
+    Reply getGit(String path, String token, boolean refresh) {
+        return cachedGet(hostinger.apiUrl() + path, path, token, refresh, GIT_TTL);
+    }
+
+    /** The saved answer {@link #getGit} would reuse, if there is one; Hostinger is never asked. */
+    Optional<Reply> savedGit(String path, String token) {
+        return cache.get("GET", hostinger.apiUrl() + path, token, GIT_TTL);
+    }
+
+    /** How many requests have left for Hostinger since the app started (answers reused from the cache do not count). */
+    long sentCount() {
+        return sent.get();
+    }
+
     /** Forgets every saved answer; called when the token is saved or removed. */
     void clearCache() {
         cache.clear();
@@ -146,8 +185,12 @@ class HostingerClient {
     }
 
     private Reply cachedGet(String url, String path, String token, boolean refresh) {
+        return cachedGet(url, path, token, refresh, HostingerResponseCache.TTL);
+    }
+
+    private Reply cachedGet(String url, String path, String token, boolean refresh, Duration ttl) {
         if (!refresh) {
-            Optional<Reply> saved = cache.get("GET", url, token);
+            Optional<Reply> saved = cache.get("GET", url, token, ttl);
             if (saved.isPresent()) {
                 return saved.get();
             }
@@ -184,6 +227,7 @@ class HostingerClient {
     }
 
     private Reply exchange(String url, String token) {
+        sent.incrementAndGet();
         return http.get().uri(url)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .accept(MediaType.APPLICATION_JSON)

@@ -8,6 +8,9 @@ import type { WireMock } from './wiremock'
  *
  * For GET /user/repos, `stubRepos` serves several pages linked with absolute `Link` headers, as GitHub does.
  *
+ * For GET /repos/{owner}/{repo} (is a linked repository still there?): `stubRepository` (found),
+ * `stubRepositoryNotFound` (404) and `stubRepositoryError` (any other status).
+ *
  * A later stub for the same endpoint wins, so a test can change GitHub's answer between two polls.
  *
  * Usage:
@@ -212,3 +215,36 @@ export async function stubReposRateLimited(wiremock: WireMock, retryAfterSeconds
     }
   })
 }
+
+export function repositoryPath(fullName: string): string {
+  return `/repos/${fullName}`
+}
+
+/** GET /repos/{owner}/{name} finds the repository (`fullName` is "owner/name"). */
+export async function stubRepository(wiremock: WireMock, fullName: string): Promise<void> {
+  const [owner, name] = fullName.split('/')
+  await wiremock.stubFor({
+    request: { method: 'GET', urlPath: repositoryPath(fullName) },
+    response: { status: 200, jsonBody: githubRepoJson({ owner, name }) }
+  })
+}
+
+/** GET /repos/{owner}/{name} answers with this status, e.g. 403, 401 or 503. */
+export async function stubRepositoryError(
+  wiremock: WireMock,
+  fullName: string,
+  status: number,
+  message = 'Error'
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: 'GET', urlPath: repositoryPath(fullName) },
+    response: {
+      status,
+      jsonBody: { message, documentation_url: 'https://docs.github.com/rest', status: String(status) }
+    }
+  })
+}
+
+/** GET /repos/{owner}/{name} answers 404: deleted, or private and hidden from the user. */
+export const stubRepositoryNotFound = (wiremock: WireMock, fullName: string): Promise<void> =>
+  stubRepositoryError(wiremock, fullName, 404, 'Not Found')
