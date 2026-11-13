@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   ApiProblem,
   disconnectGithub,
   fetchStatus,
   pollGithubConnect,
+  recheckGithub,
   startGithubConnect,
   statusKey,
   type GithubDeviceCode
@@ -117,6 +119,8 @@ function GithubSection({ baseUrl }: { baseUrl: string }) {
   const status = useQuery({ queryKey: statusKey(baseUrl), queryFn: () => fetchStatus(baseUrl) })
   const github = status.data?.sources.find((s) => s.source === 'GITHUB')
   const refreshStatus = () => queryClient.invalidateQueries({ queryKey: statusKey(baseUrl) })
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const start = useMutation({
     mutationFn: () => startGithubConnect(baseUrl),
@@ -134,6 +138,24 @@ function GithubSection({ baseUrl }: { baseUrl: string }) {
       return refreshStatus()
     }
   })
+
+  // Opening Settings asks GitHub about the token right away (skipping the backend's one-minute cache),
+  // so a revoked token shows up here without waiting.
+  useEffect(() => {
+    recheckGithub(baseUrl)
+      .catch(() => {})
+      .finally(() => void refreshStatus())
+  }, [baseUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Reconnect" in the sidebar lands here with { reconnect: true }: start the device flow straight away,
+  // once the status confirms the token is broken.
+  const wantsReconnect = (location.state as { reconnect?: boolean } | null)?.reconnect === true
+  useEffect(() => {
+    if (wantsReconnect && github?.state === 'ERROR' && !code && !start.isPending) {
+      navigate(location.pathname, { replace: true, state: null })
+      start.mutate()
+    }
+  }, [wantsReconnect, github?.state]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function connectButton(label: string) {
     return (

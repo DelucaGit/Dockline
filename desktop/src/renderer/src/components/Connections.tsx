@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
-import { NavLink } from 'react-router-dom'
-import { fetchStatus, statusKey, type ConnectionState } from '@/api/github'
+import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { fetchStatus, recheckGithub, statusKey, type ConnectionState } from '@/api/github'
 import { cn } from '@/lib/utils'
 import { strings } from '@/strings'
 
@@ -16,6 +17,8 @@ const DOT: Record<Shown, string> = {
 
 /** Status dots for GitHub and Hostinger at the bottom of the sidebar. A click opens Settings. */
 export function Connections({ baseUrl }: { baseUrl: string }) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { data } = useQuery({
     queryKey: statusKey(baseUrl),
     queryFn: () => fetchStatus(baseUrl),
@@ -23,6 +26,18 @@ export function Connections({ baseUrl }: { baseUrl: string }) {
     refetchInterval: 30_000,
     refetchOnWindowFocus: true
   })
+
+  // The backend caches GitHub's answer for a minute; when the user comes back to the window, ask GitHub
+  // directly so a revoked token shows up at once.
+  useEffect(() => {
+    const onFocus = () => {
+      recheckGithub(baseUrl)
+        .catch(() => {})
+        .finally(() => void queryClient.invalidateQueries({ queryKey: statusKey(baseUrl) }))
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [baseUrl, queryClient])
 
   const entries = [
     { source: 'GITHUB' as const, label: strings.connections.github },
@@ -36,18 +51,29 @@ export function Connections({ baseUrl }: { baseUrl: string }) {
         const state: Shown = data?.sources.find((s) => s.source === source)?.state ?? 'UNKNOWN'
         const text = strings.connections.state[state]
         return (
-          <NavLink
-            key={source}
-            to="/settings"
-            title={`${label}: ${text}`}
-            aria-label={`${label}: ${text}`}
-            data-testid={`connection-${source.toLowerCase()}`}
-            data-state={state}
-            className={cn('flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent')}
-          >
-            <span aria-hidden className={cn('size-2.5 shrink-0 rounded-full', DOT[state])} />
-            <span>{label}</span>
-          </NavLink>
+          <div key={source} className="flex items-center">
+            <NavLink
+              to="/settings"
+              title={`${label}: ${text}`}
+              aria-label={`${label}: ${text}`}
+              data-testid={`connection-${source.toLowerCase()}`}
+              data-state={state}
+              className={cn('flex items-center gap-2 rounded-md px-3 py-1.5 text-sm flex-1 hover:bg-accent')}
+            >
+              <span aria-hidden className={cn('size-2.5 shrink-0 rounded-full', DOT[state])} />
+              <span>{label}</span>
+            </NavLink>
+          {source === 'GITHUB' && state === 'ERROR' && (
+            <button
+              type="button"
+              className="mr-2 rounded-md px-2 py-1 text-xs font-medium underline hover:bg-accent"
+              aria-label={strings.connections.reconnectLabel}
+              onClick={() => navigate('/settings', { state: { reconnect: true } })}
+            >
+              {strings.connections.reconnect}
+            </button>
+          )}
+          </div>
         )
       })}
     </div>
