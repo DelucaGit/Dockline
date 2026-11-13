@@ -130,6 +130,8 @@ GitHub uses the **device flow**: the app shows a short code, the user enters it 
 
 `GET /api/github/repositories` answers `{repositories: [{name, fullName, visibility, lastPushAt, htmlUrl, fork, archived}], fetchedAt, truncated}`: `visibility` is `PRIVATE` or `PUBLIC`, `lastPushAt` is ISO-8601 or `null` (never pushed), the list is most recently pushed first, and `fetchedAt` is when the backend asked GitHub. It calls GitHub's `GET /user/repos` (everything the user owns, collaborates on or sees through an organization, 100 per page) and follows every `rel="next"` page link, but only links on the configured GitHub API address, so the token is never sent anywhere else; it stops after 50 pages (5,000 repositories) and then sets `truncated: true`. Nothing is cached: every call (and so every "Refresh") asks GitHub again.
 
+**Repos view (desktop).** The Repos page fetches on open and on **Refresh** only (no timer, no refetch on window focus), shows each repository with a Private/Public badge, the last push as a relative time (exact time on hover) and a "Last updated" time; clicking a name opens it on GitHub in the default browser. Its reusable pieces for the Sites and Domains views are `components/ViewHeader.tsx` (title, Last updated, Refresh), `components/ViewState.tsx` (loading / empty / error) and `lib/relativeTime.ts`.
+
 Errors are `application/problem+json` with a stable `code` property for the UI and a readable `detail`:
 
 | Status | `code` | When |
