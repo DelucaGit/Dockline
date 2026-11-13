@@ -12,10 +12,12 @@ import {
   statusKey,
   type GithubDeviceCode
 } from '@/api/github'
+import { recheckHostinger, removeHostingerToken, saveHostingerToken } from '@/api/hostinger'
 import { Button } from '@/components/ui/button'
 import { strings } from '@/strings'
 
 const t = strings.settings.github
+const h = strings.settings.hostinger
 
 type Failure = { message: string; setupHelp: boolean }
 
@@ -255,11 +257,159 @@ function GithubSection({ baseUrl }: { baseUrl: string }) {
   )
 }
 
+function HostingerSection({ baseUrl }: { baseUrl: string }) {
+  const queryClient = useQueryClient()
+  const [token, setToken] = useState('')
+  const [confirming, setConfirming] = useState(false)
+
+  const status = useQuery({ queryKey: statusKey(baseUrl), queryFn: () => fetchStatus(baseUrl) })
+  const hostinger = status.data?.sources.find((s) => s.source === 'HOSTINGER')
+  const refreshStatus = () => queryClient.invalidateQueries({ queryKey: statusKey(baseUrl) })
+
+  const save = useMutation({
+    mutationFn: (value: string) => saveHostingerToken(baseUrl, value),
+    // Whether it worked or not, the secret does not stay in the field.
+    onSettled: () => setToken(''),
+    onSuccess: () => refreshStatus()
+  })
+  const remove = useMutation({
+    mutationFn: () => removeHostingerToken(baseUrl),
+    onSuccess: () => {
+      setConfirming(false)
+      save.reset()
+      return refreshStatus()
+    }
+  })
+
+  // Opening Settings asks Hostinger about the token right away (skipping the backend's cache).
+  useEffect(() => {
+    recheckHostinger(baseUrl)
+      .catch(() => {})
+      .finally(() => void refreshStatus())
+  }, [baseUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const state = hostinger?.state
+  const saveFailure = save.isError ? failureFrom(save.error, h.saveError).message : null
+
+  const form = (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (token.trim() && !save.isPending) save.mutate(token.trim())
+      }}
+    >
+      <div className="space-y-1">
+        <label htmlFor="hostinger-token" className="text-sm font-medium">
+          {h.tokenLabel}
+        </label>
+        <input
+          id="hostinger-token"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          className="block w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+        />
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {h.help}{' '}
+        <a
+          href={h.helpUrl}
+          className="text-foreground underline"
+          onClick={(e) => {
+            e.preventDefault()
+            void window.dockline.openExternal(h.helpUrl).catch(() => {})
+          }}
+        >
+          {h.helpLink}
+        </a>
+      </p>
+      {saveFailure && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {saveFailure}
+        </p>
+      )}
+      <Button type="submit" disabled={save.isPending || !token.trim()}>
+        {save.isPending ? h.saving : h.save}
+      </Button>
+    </form>
+  )
+
+  let body
+  if (status.isError) {
+    body = (
+      <p role="alert" className="mt-4 text-sm text-red-600 dark:text-red-400">
+        {t.statusLoadError}
+      </p>
+    )
+  } else if (!hostinger) {
+    body = null
+  } else if (state === 'NOT_CONNECTED') {
+    body = (
+      <div className="mt-4 space-y-3">
+        <p className="text-sm text-muted-foreground">{h.notConnectedHint}</p>
+        {form}
+      </div>
+    )
+  } else {
+    const title = state === 'CONNECTED' ? h.connected : state === 'LIMITED' ? h.limited : h.error
+    body = (
+      <div className="mt-4 space-y-3">
+        <p className="font-medium">{title}</p>
+        {hostinger.message && <p className="text-sm text-muted-foreground">{hostinger.message}</p>}
+        {state === 'ERROR' && (
+          <>
+            <p className="text-sm text-muted-foreground">{h.replaceHint}</p>
+            {form}
+          </>
+        )}
+        {confirming ? (
+          <div role="alertdialog" aria-labelledby="hostinger-disconnect-title" className="space-y-3 rounded-md border border-border p-3">
+            <p id="hostinger-disconnect-title" className="font-medium">
+              {h.confirmTitle}
+            </p>
+            <p className="text-sm text-muted-foreground">{h.confirmText}</p>
+            {remove.isError && (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {h.disconnectError}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button onClick={() => remove.mutate()} disabled={remove.isPending}>
+                {remove.isPending ? h.disconnecting : h.confirmYes}
+              </Button>
+              <Button variant="ghost" onClick={() => setConfirming(false)}>
+                {h.confirmNo}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="ghost" onClick={() => setConfirming(true)}>
+            {h.disconnect}
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <section aria-labelledby="hostinger-heading" className="mt-6 max-w-xl rounded-md border border-border p-4">
+      <h2 id="hostinger-heading" className="text-lg font-semibold">
+        {h.heading}
+      </h2>
+      {body}
+    </section>
+  )
+}
+
 export function SettingsPage({ baseUrl }: { baseUrl: string }) {
   return (
     <section>
       <h1 className="text-2xl font-semibold">{strings.settings.title}</h1>
       <GithubSection baseUrl={baseUrl} />
+      <HostingerSection baseUrl={baseUrl} />
     </section>
   )
 }
