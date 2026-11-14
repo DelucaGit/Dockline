@@ -53,6 +53,7 @@ npm run dev              # start the app in development mode (hot reload)
 npm test                 # run the frontend tests (Vitest + Testing Library)
 npm run build            # type-check and build
 npm run generate:api     # regenerate API types from ../backend/openapi.json
+npm run dist             # build the Windows installer (see below)
 ```
 
 `generate:api` writes `desktop/src/renderer/src/api/schema.d.ts`. That file is committed; re-run the command after the backend's `openapi.json` changes. All user-facing text lives in `desktop/src/renderer/src/strings.ts`. The theme follows the Windows light/dark setting.
@@ -66,6 +67,8 @@ When the app opens, the Electron main process starts the backend as a child proc
 | Java | `DOCKLINE_JAVA` (full path to `java`/`java.exe`), else `JAVA_HOME/bin/java`, else `java` on PATH. The backend needs Java 25. |
 | Backend jar | `DOCKLINE_BACKEND_JAR`, else `backend/target/dockline-backend-*.jar` (build it first with `./mvnw verify`). |
 
+The installed app ignores all of these: it always runs `resources/runtime/bin/java.exe` and `resources/backend/dockline-backend.jar` from its install folder (see below).
+
 So to run the whole app from Git Bash:
 
 ```bash
@@ -73,6 +76,16 @@ export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-25.0.5.8-hotspot"
 (cd backend && ./mvnw verify)
 cd desktop && npm run dev
 ```
+
+### Windows installer
+
+`npm run dist` in `desktop/` builds the installer `desktop/dist/Dockline Setup <version>.exe` (about 170 MB). It needs a JDK 25 (`JAVA_HOME`, or `jlink` on PATH) and takes a few minutes; the first run downloads Electron and NSIS. Steps:
+
+1. `npm run build` – type-check and build the app.
+2. `scripts/prepare-backend.js` – builds the backend jar (`./mvnw package`, tests skipped) and a trimmed Java runtime with `jlink` (only the Java modules the backend needs, about 85 MB instead of a full JDK) into `desktop/build-resources/`.
+3. `electron-builder` (config in `desktop/electron-builder.yml`) – packs the app, the jar and the runtime into an NSIS installer.
+
+The installer installs per user (no admin rights), lets the user pick the folder, adds a Start menu entry and a normal uninstaller (also in Windows *Installed apps*). It is not code-signed, so Windows SmartScreen may warn on first run. `desktop/build-resources/` and `desktop/dist/` are git-ignored.
 
 ### External API addresses
 

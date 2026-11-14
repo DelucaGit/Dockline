@@ -9,19 +9,39 @@ const POLL_INTERVAL_MS = 300
 const LOG_TAIL_LINES = 15
 
 /**
- * Which Java to run the backend with. Kept in one place: task #52 will replace
- * this with the Java runtime bundled in the installer.
+ * Where the backend files live inside an installed (packaged) app: `resourcesPath` is Electron's
+ * `process.resourcesPath`. `null` means a dev run, which uses the repo's build output instead.
  */
-export function resolveJava(env: NodeJS.ProcessEnv = process.env): string {
+export type Packaged = { resourcesPath: string } | null
+
+const javaExe = (): string => (process.platform === 'win32' ? 'java.exe' : 'java')
+
+/**
+ * Which Java to run the backend with. An installed app always uses the trimmed Java runtime
+ * bundled in the installer, never one from PATH or JAVA_HOME. In dev: DOCKLINE_JAVA, JAVA_HOME, PATH.
+ */
+export function resolveJava(
+  env: NodeJS.ProcessEnv = process.env,
+  packaged: Packaged = null
+): string {
+  if (packaged) return join(packaged.resourcesPath, 'runtime', 'bin', javaExe())
   if (env['DOCKLINE_JAVA']) return env['DOCKLINE_JAVA']
   if (env['JAVA_HOME']) {
-    return join(env['JAVA_HOME'], 'bin', process.platform === 'win32' ? 'java.exe' : 'java')
+    return join(env['JAVA_HOME'], 'bin', javaExe())
   }
   return 'java'
 }
 
-/** Where the backend jar is. DOCKLINE_BACKEND_JAR overrides; otherwise the Maven build output. */
-export function resolveJar(appPath: string, env: NodeJS.ProcessEnv = process.env): string | null {
+/**
+ * Where the backend jar is. An installed app uses the jar bundled in the installer. In dev:
+ * DOCKLINE_BACKEND_JAR, otherwise the Maven build output.
+ */
+export function resolveJar(
+  appPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  packaged: Packaged = null
+): string | null {
+  if (packaged) return join(packaged.resourcesPath, 'backend', 'dockline-backend.jar')
   if (env['DOCKLINE_BACKEND_JAR']) return env['DOCKLINE_BACKEND_JAR']
   const targetDir = join(appPath, '..', 'backend', 'target')
   if (!existsSync(targetDir)) return null
@@ -88,7 +108,10 @@ export class BackendProcess {
   private state: BackendState = { status: 'starting' }
   private generation = 0
 
-  constructor(private readonly appPath: string) {}
+  constructor(
+    private readonly appPath: string,
+    private readonly packaged: Packaged = null
+  ) {}
 
   getState(): BackendState {
     return this.state
@@ -102,7 +125,7 @@ export class BackendProcess {
     const set = (s: BackendState): BackendState =>
       run === this.generation ? (this.state = s) : this.state
 
-    const jar = resolveJar(this.appPath)
+    const jar = resolveJar(this.appPath, process.env, this.packaged)
     if (!jar || !existsSync(jar)) {
       return set({
         status: 'error',
@@ -117,7 +140,7 @@ export class BackendProcess {
       return set({ status: 'error', message: `Could not find a free port: ${String(e)}` })
     }
     const baseUrl = `http://127.0.0.1:${port}`
-    const java = resolveJava()
+    const java = resolveJava(process.env, this.packaged)
 
     const tail: string[] = []
     const collect = (chunk: Buffer): void => {

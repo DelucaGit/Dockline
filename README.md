@@ -8,7 +8,7 @@
 
 If you build websites for yourself or for clients, the pieces live in different places: the code on GitHub, the hosting and domains in Hostinger's hPanel. Dockline connects the two. It shows which repository belongs to which site, when a domain expires, and what went wrong when something fails, without logging in to three dashboards.
 
-> **Status:** early development (v0.1), Windows only. The sites, repositories, domains, log and settings screens work against the real GitHub and Hostinger APIs; the overview page is still empty. Deploy, files and email are planned (see [Roadmap](#roadmap)).
+> **Status:** early development (v0.1), Windows only. The sites, repositories, domains, log and settings screens and the overview page work against the real GitHub and Hostinger APIs. Deploy, files and email are planned (see [Roadmap](#roadmap)).
 
 ## What it does
 
