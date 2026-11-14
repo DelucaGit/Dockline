@@ -61,7 +61,11 @@ export const strings = {
     inProgress: 'In progress',
     unknown: 'Unknown',
     none: 'No deploy information',
-    sourceHostinger: 'Hostinger'
+    sourceHostinger: 'Hostinger',
+    heading: 'Latest deploy',
+    checking: 'Checking deploy status…',
+    rateLimited: 'Deploy status: rate limited, retrying in {seconds} s',
+    updateFailed: 'Deploy status could not be updated.'
   },
   sites: {
     title: 'Sites',

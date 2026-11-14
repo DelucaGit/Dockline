@@ -13,10 +13,13 @@ import {
   type SiteDetail,
   type SiteSourceProblem
 } from '@/api/sites'
+import { DeployStatus } from '@/components/DeployStatus'
+import { DeployTroubleNote } from '@/components/DeployTroubleNote'
 import { ViewHeader } from '@/components/ViewHeader'
 import { CARD, ViewError, ViewLoading } from '@/components/ViewState'
 import { Button } from '@/components/ui/button'
 import { problemState } from '@/lib/problemState'
+import { useSiteDeploys, type SiteDeploysState } from '@/lib/useSiteDeploys'
 import { strings } from '@/strings'
 
 const t = strings.site
@@ -285,6 +288,28 @@ function LinkedRepo({ baseUrl, site }: { baseUrl: string; site: SiteDetail }) {
   )
 }
 
+/** The site's latest deploy, refreshed automatically while this view is open and the app is in the foreground. */
+function LatestDeploy({ domain, deploys }: { domain: string; deploys: SiteDeploysState }) {
+  const d = strings.deploy
+  const deploy = deploys.deployFor(domain)
+  return (
+    <div data-testid="site-deploy" className={`${CARD} space-y-2`}>
+      <h2 className="font-semibold">{d.heading}</h2>
+      {deploy !== undefined && <DeployStatus deploy={deploy} className="text-sm" />}
+      {deploy === undefined && !deploys.trouble && <p className="text-sm text-muted-foreground">{d.checking}</p>}
+      <DeployTroubleNote trouble={deploys.trouble} />
+      {deploys.fetchedAt && (
+        <p className="text-xs text-muted-foreground">
+          {strings.view.lastUpdated}{' '}
+          <time data-testid="deploy-fetched-at" dateTime={deploys.fetchedAt}>
+            {new Date(deploys.fetchedAt).toLocaleTimeString()}
+          </time>
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function SiteDetailPage({ baseUrl }: { baseUrl: string }) {
   const domain = useParams().domain ?? ''
   const navigate = useNavigate()
@@ -304,9 +329,12 @@ export function SiteDetailPage({ baseUrl }: { baseUrl: string }) {
     gcTime: 0
   })
   const data = site.isError ? undefined : site.data
+  // The deploy status is an extra: asked for once the site is there; its failures never replace the view.
+  const deploys = useSiteDeploys(baseUrl, !!data)
   const refresh = () => {
     forceRefresh.current = true
     void site.refetch()
+    deploys.refresh()
   }
   const notFound = site.error instanceof ApiProblem && site.error.code === 'SITE_NOT_FOUND'
 
@@ -338,6 +366,7 @@ export function SiteDetailPage({ baseUrl }: { baseUrl: string }) {
           {data.problems.map((problem) => (
             <SourceNotice key={problem.source} problem={problem} />
           ))}
+          <LatestDeploy domain={data.domain} deploys={deploys} />
           <LinkedRepo baseUrl={baseUrl} site={data} />
         </div>
       )}
