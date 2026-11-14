@@ -79,6 +79,15 @@ async function states(window: Page): Promise<string[]> {
   return body.sources.map((s) => s.state)
 }
 
+/**
+ * Both tokens were found in Credential Manager without connecting again. The views the app opens at start
+ * call fake endpoints this test does not stub, so a source may be LIMITED instead of CONNECTED; both
+ * mean a stored token was used. NOT_CONNECTED would mean the token was lost.
+ */
+async function expectTokensKept(window: Page): Promise<void> {
+  for (const state of await states(window)) expect(['CONNECTED', 'LIMITED']).toContain(state)
+}
+
 async function connectBoth(window: Page): Promise<void> {
   expect((await api(window, 'PUT', '/api/hostinger/token', { token: FAKE_HOSTINGER.token })).status).toBe(200)
   expect((await api(window, 'POST', '/api/github/connect')).status).toBe(200)
@@ -187,7 +196,7 @@ test('settings, logs and tokens survive uninstall + reinstall and installing ove
     // 3. Install again: the link is still there; with the real Credential Manager so are the tokens.
     install(installDir)
     window = await launch()
-    if (REAL_USER_DATA) expect(await states(window)).toEqual(['CONNECTED', 'CONNECTED'])
+    if (REAL_USER_DATA) await expectTokensKept(window)
     else await connectBoth(window)
     await expectLinkKept(window)
     await close()
@@ -195,7 +204,7 @@ test('settings, logs and tokens survive uninstall + reinstall and installing ove
     // 4. Install over the existing install (what a newer version does): everything is kept again.
     install(installDir)
     window = await launch()
-    if (REAL_USER_DATA) expect(await states(window)).toEqual(['CONNECTED', 'CONNECTED'])
+    if (REAL_USER_DATA) await expectTokensKept(window)
     else await connectBoth(window)
     await expectLinkKept(window)
     if (REAL_USER_DATA) {
