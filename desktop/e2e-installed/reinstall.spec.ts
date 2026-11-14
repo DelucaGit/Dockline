@@ -134,7 +134,7 @@ test('settings, logs and tokens survive uninstall + reinstall and installing ove
     // after the package name) is never in the install folder; in the default mode it is in the temporary folder.
     expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true)
     const electronData = (await app.evaluate(({ app }) => app.getPath('userData'))).toLowerCase()
-    expect(electronData.startsWith(installDir.toLowerCase())).toBe(false)
+    expect(electronData.startsWith(join(installDir, '').toLowerCase())).toBe(false)
     if (!REAL_USER_DATA) expect(electronData).toBe(userDataDir.toLowerCase())
     return window
   }
