@@ -22,6 +22,10 @@ import java.util.List;
  * ({@link #gitRepositories}), and not connected ({@link #gitNotConnected}). The shapes follow Hostinger's
  * OpenAPI document (github.com/hostinger/api, openapi.json).
  *
+ * <p>A Node.js website's builds (deploys) have fakes too: {@link #buildSucceeded}, {@link #buildFailed},
+ * {@link #buildInProgress}, {@link #buildsEmpty}, {@link #buildsNotFound} and {@link #buildsServerError},
+ * built from the same document's examples.
+ *
  * <p>The same fakes exist for the desktop E2E tests in {@code desktop/e2e/support/hostingerStubs.ts}.
  * A later stub for the same endpoint wins, so a test can change Hostinger's answer between two calls.
  */
@@ -181,6 +185,117 @@ public final class HostingerStubs {
         return """
                 {"domain":"%s","vhost_type":"main","is_enabled":%s,"username":"%s","client_id":67890,                "order_id":%d,"created_at":"%s","root_directory":"/home/%s/domains/%s/public_html",                "parent_domain":null,"website_type":"wordpress","horizons_uuid":null}"""
                 .formatted(domain, enabled, username, orderId, createdAt, username, domain, domain);
+    }
+
+    /** The same with Hostinger's {@code website_type}: wordpress, builder, horizons, nodejs or other. */
+    public static String site(String domain, String username, long orderId, boolean enabled, String createdAt,
+            String websiteType) {
+        return site(domain, username, orderId, enabled, createdAt)
+                .replace("\"website_type\":\"wordpress\"", "\"website_type\":\"" + websiteType + "\"");
+    }
+
+    public static String nodejsBuildsPath(String username, String domain) {
+        return "/api/hosting/v1/accounts/" + username + "/websites/" + domain + "/nodejs/builds";
+    }
+
+    /**
+     * One build as {@code GET .../nodejs/builds} returns it, built from a Git repository (octocat/my-site, branch
+     * main). {@code state} is pending, running, completed or failed. {@code commitHash} null means Hostinger has
+     * not cloned the repository yet: {@code commit} is null. Timestamps are in Hostinger's format, e.g.
+     * {@code 2024-05-29T05:49:49.067239Z}.
+     */
+    public static String build(String uuid, String state, String createdAt, String updatedAt, String commitHash,
+            String commitMessage) {
+        String commit = commitHash == null ? "null" : """
+                {"hash":"%s","message":"%s","author":{"name":"Jane Doe"}}""".formatted(commitHash, commitMessage);
+        return """
+                {"uuid":"%s","state":"%s","options":{"source_type":"git","source_options":{"owner":"octocat",\
+                "repository":"my-site","branch":"main","commit":%s}},"created_at":"%s","updated_at":"%s"}"""
+                .formatted(uuid, state, commit, createdAt, updatedAt);
+    }
+
+    /** A build from an uploaded archive: no repository and no commit ({@code source_options} is null). */
+    public static String archiveBuild(String uuid, String state, String createdAt, String updatedAt) {
+        return """
+                {"uuid":"%s","state":"%s","options":{"source_type":"archive","source_options":null},\
+                "created_at":"%s","updated_at":"%s"}""".formatted(uuid, state, createdAt, updatedAt);
+    }
+
+    /** The website's builds, all on one page, in the order given (Hostinger does not document the order). */
+    public static void builds(WireMockServer hostinger, String username, String domain, String... builds) {
+        hostinger.stubFor(get(urlPathEqualTo(nodejsBuildsPath(username, domain)))
+                .willReturn(okJson(buildsBody(List.of(builds), 1, 100, builds.length))));
+    }
+
+    /**
+     * One page of the website's builds, answering only {@code ?page=N}; {@code total} is the number of builds on
+     * all pages together, {@code perPage} the page size Hostinger reports.
+     */
+    public static void buildsPage(WireMockServer hostinger, String username, String domain, int page, int perPage,
+            int total, String... builds) {
+        hostinger.stubFor(get(urlPathEqualTo(nodejsBuildsPath(username, domain)))
+                .withQueryParam("page", equalTo(Integer.toString(page)))
+                .willReturn(okJson(buildsBody(List.of(builds), page, perPage, total))));
+    }
+
+    private static String buildsBody(List<String> builds, int page, int perPage, int total) {
+        return """
+                {"data":[%s],"meta":{"current_page":%d,"per_page":%d,"total":%d}}"""
+                .formatted(String.join(",", builds), page, perPage, total);
+    }
+
+    /** The website's latest (and only) build succeeded, with this commit. */
+    public static void buildSucceeded(WireMockServer hostinger, String username, String domain, String commitHash,
+            String commitMessage) {
+        builds(hostinger, username, domain, build("69f07fe2-197a-4fb3-9dae-606f965ad13d", "completed",
+                "2024-05-29T05:49:49.067239Z", "2024-05-29T05:51:02.000000Z", commitHash, commitMessage));
+    }
+
+    /** The website's latest (and only) build failed, with this commit. */
+    public static void buildFailed(WireMockServer hostinger, String username, String domain, String commitHash,
+            String commitMessage) {
+        builds(hostinger, username, domain, build("7a0181f3-2a8b-4c0c-8ebf-717fa76be24e", "failed",
+                "2024-05-29T06:10:00.000000Z", "2024-05-29T06:10:41.000000Z", commitHash, commitMessage));
+    }
+
+    /**
+     * The website's latest (and only) build is not finished: {@code state} pending (no commit known yet) or
+     * running (the commit is known).
+     */
+    public static void buildInProgress(WireMockServer hostinger, String username, String domain, String state) {
+        builds(hostinger, username, domain, build("8b1292a4-3b9c-4d1d-9fc0-828ab87cf35f", state,
+                "2024-05-29T07:00:00.000000Z", "2024-05-29T07:00:05.000000Z",
+                state.equals("pending") ? null : "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1", "Add contact page"));
+    }
+
+    /** A Node.js website that was never built: an empty list. */
+    public static void buildsEmpty(WireMockServer hostinger, String username, String domain) {
+        builds(hostinger, username, domain);
+    }
+
+    /** Hostinger knows no builds for the website (e.g. it is not a Node.js website): 404. */
+    public static void buildsNotFound(WireMockServer hostinger, String username, String domain) {
+        hostinger.stubFor(get(urlPathEqualTo(nodejsBuildsPath(username, domain))).willReturn(error(404,
+                "{\"message\":\"Not Found\",\"correlation_id\":\"c0ffee00-0000-4000-8000-000000000041\"}")));
+    }
+
+    public static void buildsServerError(WireMockServer hostinger, String username, String domain) {
+        hostinger.stubFor(get(urlPathEqualTo(nodejsBuildsPath(username, domain))).willReturn(error(500, """
+                {"message":"Server Error","correlation_id":"c0ffee00-0000-4000-8000-000000000043"}""")));
+    }
+
+    /** The builds endpoint answers 401; {@code echo} is put into the body to check that it gets masked. */
+    public static void buildsUnauthorized(WireMockServer hostinger, String username, String domain, String echo) {
+        hostinger.stubFor(get(urlPathEqualTo(nodejsBuildsPath(username, domain))).willReturn(error(401, """
+                {"message":"Unauthenticated.","correlation_id":"c0ffee00-0000-4000-8000-000000000044","debug":"%s"}"""
+                .formatted(echo))));
+    }
+
+    public static void buildsRateLimited(WireMockServer hostinger, String username, String domain,
+            int retryAfterSeconds) {
+        hostinger.stubFor(get(urlPathEqualTo(nodejsBuildsPath(username, domain))).willReturn(error(429, """
+                {"message":"Too Many Attempts.","correlation_id":"c0ffee00-0000-4000-8000-000000000042"}""")
+                .withHeader("Retry-After", Integer.toString(retryAfterSeconds))));
     }
 
     /**
