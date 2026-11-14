@@ -1,17 +1,27 @@
 import { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
+import { DEPLOY_REFRESH_MS, deploysKey, fetchDeploys, type SiteDeploy } from '@/api/deploys'
 import { statusKey } from '@/api/github'
 import { fetchSites, sitesKey, type HostingerSite } from '@/api/hostinger'
 import { fetchSiteLinks, siteLinksKey, type SiteRepo } from '@/api/sites'
+import { DeployStatus } from '@/components/DeployStatus'
 import { RateLimited } from '@/components/RateLimited'
 import { ViewHeader } from '@/components/ViewHeader'
 import { CARD, ViewEmpty, ViewError, ViewLoading } from '@/components/ViewState'
 import { Button } from '@/components/ui/button'
 import { problemState, type ProblemState } from '@/lib/problemState'
+import { useForeground } from '@/lib/useForeground'
 import { strings } from '@/strings'
 
-function SiteRow({ site, repo }: { site: HostingerSite; repo?: SiteRepo }) {
+interface SiteRowProps {
+  site: HostingerSite
+  repo?: SiteRepo
+  /** The site's latest deploy; null when there is none, undefined while the deploys are not known yet. */
+  deploy?: SiteDeploy | null
+}
+
+function SiteRow({ site, repo, deploy }: SiteRowProps) {
   const t = strings.sites
   return (
     <li
@@ -48,6 +58,7 @@ function SiteRow({ site, repo }: { site: HostingerSite; repo?: SiteRepo }) {
           {repo.fullName}
         </button>
       )}
+      {deploy !== undefined && <DeployStatus deploy={deploy} className="basis-full" />}
     </li>
   )
 }
@@ -121,10 +132,55 @@ export function SitesPage({ baseUrl }: { baseUrl: string }) {
     }
   }
 
+  // The latest deploy of each site is an extra too. It is asked for again every DEPLOY_REFRESH_MS, but only while
+  // this view is open and the app is in the foreground. A failed call shows nothing: the last answer stays.
+  const foreground = useForeground()
+  const forceDeploys = useRef(false)
+  const deploysEnabled = !!data && data.sites.length > 0
+  const deploys = useQuery({
+    queryKey: deploysKey(baseUrl),
+    queryFn: async () => {
+      const answer = await fetchDeploys(baseUrl, forceDeploys.current)
+      forceDeploys.current = false
+      return answer
+    },
+    enabled: deploysEnabled,
+    retry: false,
+    refetchInterval: foreground ? DEPLOY_REFRESH_MS : false,
+    refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
+    staleTime: 0
+  })
+  // A site whose status could not be read this time (e.g. rate limited) keeps the status it had before.
+  const lastKnown = useRef(new Map<string, SiteDeploy>())
+  const deployByDomain = new Map<string, SiteDeploy>()
+  for (const deploy of deploys.data?.deploys ?? []) {
+    const domain = deploy.domain.toLowerCase()
+    const unreadable = deploy.status === 'UNKNOWN' && deploy.problems.length > 0
+    const shown = (unreadable && lastKnown.current.get(domain)) || deploy
+    if (!unreadable) lastKnown.current.set(domain, deploy)
+    deployByDomain.set(domain, shown)
+  }
+
+  // Back in the foreground: do not wait a whole interval when what is shown is already old.
+  const wasForeground = useRef(foreground)
+  const refetchDeploys = deploys.refetch
+  const deploysUpdatedAt = deploys.dataUpdatedAt
+  useEffect(() => {
+    const returned = foreground && !wasForeground.current
+    wasForeground.current = foreground
+    if (returned && deploysEnabled && Date.now() - deploysUpdatedAt >= DEPLOY_REFRESH_MS) void refetchDeploys()
+    // Only a change of `foreground` matters here.
+  }, [foreground])
+
   const refresh = () => {
     forceRefresh.current = true
     void sites.refetch().then((answer) => {
-      if (answer.isSuccess && answer.data.sites.length > 0) void links.refetch()
+      if (answer.isSuccess && answer.data.sites.length > 0) {
+        void links.refetch()
+        forceDeploys.current = true
+        void deploys.refetch()
+      }
     })
   }
 
@@ -146,6 +202,7 @@ export function SitesPage({ baseUrl }: { baseUrl: string }) {
               key={`${site.domain ?? ''}-${site.username ?? ''}-${i}`}
               site={site}
               repo={site.domain ? repoByDomain.get(site.domain.toLowerCase()) : undefined}
+              deploy={deploys.data ? ((site.domain && deployByDomain.get(site.domain.toLowerCase())) || null) : undefined}
             />
           ))}
         </ul>

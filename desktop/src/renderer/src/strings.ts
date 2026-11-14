@@ -55,6 +55,14 @@ export const strings = {
     // {seconds} is replaced with the Retry-After value.
     rateLimitedRetry: 'Try again in about {seconds} seconds.'
   },
+  deploy: {
+    succeeded: 'Succeeded',
+    failed: 'Failed',
+    inProgress: 'In progress',
+    unknown: 'Unknown',
+    none: 'No deploy information',
+    sourceHostinger: 'Hostinger'
+  },
   sites: {
     title: 'Sites',
     empty: 'No websites',
