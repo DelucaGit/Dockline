@@ -248,9 +248,14 @@ public final class HostingerStubs {
      * null (a free domain not claimed yet); timestamps are in Hostinger's format, e.g. {@code 2026-02-27T11:54:22Z}.
      */
     public static String domain(long id, String domain, String status, String expiresAt) {
+        return domain(id, domain, "domain", status, expiresAt);
+    }
+
+    /** The same with Hostinger's {@code type}: domain, domain_transfer, free_domain or free_domain_transfer. */
+    public static String domain(long id, String domain, String type, String status, String expiresAt) {
         return """
-                {"id":%d,"domain":%s,"type":"domain","status":"%s","created_at":"2025-02-27T11:54:22Z","expires_at":%s}"""
-                .formatted(id, domain == null ? "null" : "\"" + domain + "\"", status,
+                {"id":%d,"domain":%s,"type":"%s","status":"%s","created_at":"2025-02-27T11:54:22Z","expires_at":%s}"""
+                .formatted(id, domain == null ? "null" : "\"" + domain + "\"", type, status,
                         expiresAt == null ? "null" : "\"" + expiresAt + "\"");
     }
 

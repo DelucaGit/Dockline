@@ -178,6 +178,58 @@ class HostingerDomainsApiTest {
     }
 
     @Test
+    void aDomainListedTwiceIsShownOnceWithTheDatedRowAndNoRenewalRequest() throws Exception {
+        tokenStore.save(Source.HOSTINGER, TOKEN);
+        HostingerStubs.domains(HOSTINGER, List.of(
+                HostingerStubs.domain(1, "Claimed.example", "free_domain", "pending_setup", null),
+                HostingerStubs.domain(2, "other.example", "active", "2026-12-01T00:00:00Z"),
+                HostingerStubs.domain(3, "claimed.example", "domain", "active", "2027-03-04T05:06:07Z")));
+
+        JsonNode domains = JSON.readTree(send("GET", PATH).body()).get("domains");
+
+        assertThat(domains.valueStream().map(d -> d.get("domain").asString()))
+                .containsExactly("other.example", "claimed.example");
+        JsonNode claimed = domains.get(1);
+        assertThat(claimed.get("expiresAt").asString()).isEqualTo("2027-03-04T05:06:07Z");
+        assertThat(claimed.get("type").asString()).isEqualTo("domain");
+        assertThat(claimed.get("status").asString()).isEqualTo("active");
+        assertThat(HOSTINGER.findAll(anyRequestedFor(anyUrl()))).hasSize(1);
+        HOSTINGER.verify(0, getRequestedFor(urlPathMatching(HostingerStubs.DOMAINS_PATH + "/.*")));
+    }
+
+    @Test
+    void rowsWithoutADomainNameAllStay() throws Exception {
+        tokenStore.save(Source.HOSTINGER, TOKEN);
+        HostingerStubs.domains(HOSTINGER, List.of(
+                HostingerStubs.domain(1, null, "free_domain", "requested", null),
+                HostingerStubs.domain(2, null, "free_domain", "requested", null)));
+
+        JsonNode domains = JSON.readTree(send("GET", PATH).body()).get("domains");
+
+        assertThat(domains).hasSize(2);
+        assertThat(domains.valueStream().map(d -> d.get("domain").isNull())).containsExactly(true, true);
+        HOSTINGER.verify(0, getRequestedFor(urlPathMatching(HostingerStubs.DOMAINS_PATH + "/.*")));
+    }
+
+    @Test
+    void aDomainListedTwiceWithoutAnyDateIsAskedAboutOnceAndPrefersTheRegisteredRow() throws Exception {
+        tokenStore.save(Source.HOSTINGER, TOKEN);
+        HostingerStubs.domains(HOSTINGER, List.of(
+                HostingerStubs.domain(1, "twice.example", "free_domain", "pending_setup", null),
+                HostingerStubs.domain(2, "twice.example", "domain", "active", null)));
+        HostingerStubs.domainRenewal(HOSTINGER, "twice.example", "2027-03-04T05:06:07Z");
+
+        JsonNode domains = JSON.readTree(send("GET", PATH).body()).get("domains");
+
+        assertThat(domains).hasSize(1);
+        assertThat(domains.get(0).get("domain").asString()).isEqualTo("twice.example");
+        assertThat(domains.get(0).get("expiresAt").asString()).isEqualTo("2027-03-04T05:06:07Z");
+        assertThat(domains.get(0).get("type").asString()).isEqualTo("domain");
+        HOSTINGER.verify(1, getRequestedFor(urlPathMatching(HostingerStubs.DOMAINS_PATH + "/.*")));
+        HOSTINGER.verify(1, getRequestedFor(urlPathEqualTo(HostingerStubs.domainRenewalPath("twice.example"))));
+    }
+
+    @Test
     void aFailingRenewalCallLeavesTheListWorkingAndIsLogged() throws Exception {
         tokenStore.save(Source.HOSTINGER, TOKEN);
         HostingerStubs.domains(HOSTINGER, List.of(

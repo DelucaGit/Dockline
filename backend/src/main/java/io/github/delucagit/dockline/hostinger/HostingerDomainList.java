@@ -16,7 +16,10 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
@@ -29,6 +32,10 @@ import tools.jackson.databind.ObjectMapper;
  * sorted by earliest expiry (no expiry last), then by name. The call goes through {@link HostingerClient}
  * (shared request cap, 60-second cache, 429 handling). Failures use the same codes, Log entries and status
  * updates as {@link HostingerSiteList}.
+ *
+ * <p>The portfolio can hold the same domain name twice (a domain claimed for free with a hosting plan: one
+ * {@code free_domain} row without a date and one {@code domain} row with it). Each name is listed once, see
+ * {@link #oncePerName}; rows without a name (a free domain not claimed yet) all stay.
  *
  * <p>The portfolio has no {@code expires_at} for some domains (a free domain that came with a hosting plan).
  * For each named domain without a date, {@code GET /api/domains/v1/portfolio/{domain}/renewal} is asked and its
@@ -68,7 +75,7 @@ class HostingerDomainList {
         if (!reply.ok()) {
             throw failed(reply, token);
         }
-        List<Domain> domains = read(reply, token);
+        List<Domain> domains = oncePerName(read(reply, token));
         fillMissingExpiry(domains, token, refresh);
         domains.sort(BY_EXPIRY);
         return new Domains(List.copyOf(domains), reply.fetchedAt() != null ? reply.fetchedAt() : clock.instant());
@@ -134,6 +141,41 @@ class HostingerDomainList {
                     new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED,
                             "Hostinger sent an answer Dockline could not read."));
         }
+    }
+
+    /**
+     * Keeps one row per domain name (compared ignoring case), at the place of the name's first row. Of several
+     * rows the kept one is, unchanged: a row with an expiry date before one without; then a registered domain
+     * before a free-domain entitlement; then the first. Rows without a name are all kept.
+     */
+    private static List<Domain> oncePerName(List<Domain> rows) {
+        List<Domain> domains = new ArrayList<>();
+        Map<String, Integer> placeByName = new HashMap<>();
+        for (Domain row : rows) {
+            if (row.domain() == null) {
+                domains.add(row);
+                continue;
+            }
+            Integer place = placeByName.putIfAbsent(row.domain().toLowerCase(Locale.ROOT), domains.size());
+            if (place == null) {
+                domains.add(row);
+            } else if (saysMore(row, domains.get(place))) {
+                domains.set(place, row);
+            }
+        }
+        return domains;
+    }
+
+    /** Whether {@code row} is strictly the better one to show than {@code kept}, an earlier row of the same name. */
+    private static boolean saysMore(Domain row, Domain kept) {
+        if ((row.expiresAt() != null) != (kept.expiresAt() != null)) {
+            return row.expiresAt() != null;
+        }
+        return isRegistered(row) && !isRegistered(kept);
+    }
+
+    private static boolean isRegistered(Domain row) {
+        return "domain".equals(row.type()) || "domain_transfer".equals(row.type());
     }
 
     /** Replaces each named domain that has no expiry date with one carrying the date from its renewal information. */
