@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" width="1200" height="640" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="t">Dockline architecture</title>
+  <desc id="d">An Electron app whose main process starts a local Spring Boot backend. The React renderer talks only to that backend over REST on localhost. The backend calls the GitHub and Hostinger APIs over HTTPS and stores tokens in Windows Credential Manager and settings and logs in the AppData folder.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#57606a"/>
+    </marker>
+  </defs>
+
+  <!-- own background so the diagram never depends on the page colour -->
+  <rect x="0.5" y="0.5" width="1199" height="639" rx="14" fill="#f6f8fa" stroke="#d0d7de"/>
+
+  <text x="30" y="36" font-size="18" font-weight="700" fill="#1f2328">Dockline architecture</text>
+
+  <!-- local machine boundary -->
+  <rect x="15" y="54" width="935" height="568" rx="12" fill="none" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="6 5"/>
+  <text x="34" y="560" font-size="13" font-weight="600" fill="#1f2328">Your Windows PC</text>
+  <text x="34" y="580" font-size="12.5" fill="#57606a">Everything inside this dashed box runs locally.</text>
+  <text x="34" y="598" font-size="12.5" fill="#57606a">Only the backend talks to the internet.</text>
+
+  <text x="1095" y="110" font-size="12" font-weight="600" fill="#57606a" text-anchor="middle" letter-spacing="0.8">INTERNET</text>
+
+  <!-- ===== Electron app ===== -->
+  <rect x="30" y="76" width="370" height="410" rx="10" fill="#ffffff" stroke="#0969da" stroke-width="1.5"/>
+  <text x="50" y="104" font-size="16" font-weight="700" fill="#0550ae">Electron app</text>
+  <text x="50" y="123" font-size="12.5" fill="#57606a">Windows desktop shell</text>
+
+  <rect x="50" y="136" width="330" height="154" rx="8" fill="#ddf4ff" stroke="#54aeff"/>
+  <text x="68" y="164" font-size="15" font-weight="700" fill="#1f2328">Renderer</text>
+  <text x="68" y="190" font-size="13" fill="#1f2328">React + TypeScript</text>
+  <text x="68" y="210" font-size="13" fill="#1f2328">TanStack Query, Tailwind / shadcn</text>
+  <text x="68" y="244" font-size="12.5" fill="#57606a">Typed API client generated from</text>
+  <text x="68" y="262" font-size="12.5" fill="#57606a" font-family="ui-monospace, 'Cascadia Mono', Consolas, monospace">backend/openapi.json</text>
+
+  <rect x="50" y="312" width="330" height="154" rx="8" fill="#ddf4ff" stroke="#54aeff"/>
+  <text x="68" y="340" font-size="15" font-weight="700" fill="#1f2328">Main process</text>
+  <text x="68" y="372" font-size="13" fill="#1f2328">1. Starts the backend on a free localhost port</text>
+  <text x="68" y="399" font-size="13" fill="#1f2328">2. Waits for <tspan font-family="ui-monospace, 'Cascadia Mono', Consolas, monospace" font-size="12.5">/actuator/health</tspan> = UP</text>
+  <text x="68" y="426" font-size="13" fill="#1f2328">3. Kills the whole process tree on exit</text>
+
+  <!-- ===== Backend ===== -->
+  <rect x="560" y="76" width="370" height="410" rx="10" fill="#ffffff" stroke="#1a7f37" stroke-width="1.5"/>
+  <text x="580" y="104" font-size="16" font-weight="700" fill="#116329">Spring Boot 4 backend</text>
+  <text x="580" y="123" font-size="12.5" fill="#57606a">Java 25, child process, REST API on localhost</text>
+
+  <g font-size="12.5" fill="#57606a">
+    <rect x="580" y="136" width="330" height="58" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="596" y="170" font-size="14" font-weight="700" fill="#1f2328">github</text>
+    <text x="690" y="170">OAuth device flow, repos</text>
+
+    <rect x="580" y="204" width="330" height="58" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="596" y="238" font-size="14" font-weight="700" fill="#1f2328">hostinger</text>
+    <text x="690" y="229">Sites, domains, Git links</text>
+    <text x="690" y="247">Rate limiter + response cache</text>
+
+    <rect x="580" y="272" width="330" height="58" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="596" y="306" font-size="14" font-weight="700" fill="#1f2328">log</text>
+    <text x="690" y="306">SecretMasker, Log API</text>
+
+    <rect x="580" y="340" width="330" height="58" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="596" y="374" font-size="14" font-weight="700" fill="#1f2328">settings</text>
+    <text x="690" y="374">settings.json: site-repo links</text>
+
+    <rect x="580" y="408" width="330" height="58" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="596" y="442" font-size="14" font-weight="700" fill="#1f2328">token</text>
+    <text x="690" y="442">TokenStore</text>
+  </g>
+
+  <!-- ===== External APIs ===== -->
+  <rect x="1020" y="136" width="150" height="58" rx="8" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
+  <text x="1095" y="170" font-size="14" font-weight="700" fill="#1f2328" text-anchor="middle">GitHub API</text>
+  <rect x="1020" y="204" width="150" height="58" rx="8" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
+  <text x="1095" y="238" font-size="14" font-weight="700" fill="#1f2328" text-anchor="middle">Hostinger API</text>
+
+  <!-- ===== Local storage ===== -->
+  <rect x="560" y="536" width="175" height="68" rx="8" fill="#fff8c5" stroke="#bf8700" stroke-width="1.5"/>
+  <text x="647.5" y="564" font-size="13.5" font-weight="700" fill="#1f2328" text-anchor="middle">Windows</text>
+  <text x="647.5" y="582" font-size="13.5" font-weight="700" fill="#1f2328" text-anchor="middle">Credential Manager</text>
+
+  <rect x="755" y="536" width="175" height="68" rx="8" fill="#fff8c5" stroke="#bf8700" stroke-width="1.5"/>
+  <text x="842.5" y="564" font-size="13.5" font-weight="700" fill="#1f2328" text-anchor="middle" font-family="ui-monospace, 'Cascadia Mono', Consolas, monospace">%APPDATA%\Dockline</text>
+  <text x="842.5" y="583" font-size="12.5" fill="#57606a" text-anchor="middle">local files</text>
+
+  <!-- ===== Arrows ===== -->
+  <g stroke="#57606a" stroke-width="1.6" fill="none">
+    <line x1="382" y1="213" x2="558" y2="213" marker-end="url(#arrow)"/>
+    <line x1="382" y1="389" x2="558" y2="389" marker-end="url(#arrow)"/>
+    <line x1="912" y1="165" x2="1018" y2="165" marker-end="url(#arrow)"/>
+    <line x1="912" y1="233" x2="1018" y2="233" marker-end="url(#arrow)"/>
+    <line x1="647.5" y1="487" x2="647.5" y2="534" marker-end="url(#arrow)"/>
+    <line x1="842.5" y1="487" x2="842.5" y2="534" marker-end="url(#arrow)"/>
+  </g>
+  <g font-size="12.5" font-weight="600" fill="#1f2328" text-anchor="middle">
+    <text x="480" y="204">REST / JSON</text>
+    <text x="480" y="380">spawns</text>
+    <text x="985" y="157">HTTPS</text>
+    <text x="985" y="225">HTTPS</text>
+  </g>
+  <g font-size="12" fill="#57606a" text-anchor="middle">
+    <text x="480" y="231">localhost only</text>
+    <text x="480" y="407">child process</text>
+  </g>
+  <g font-size="12.5" font-weight="600" fill="#1f2328">
+    <text x="657" y="515">tokens</text>
+    <text x="852" y="515">settings, logs</text>
+  </g>
+</svg>

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="1200" height="360" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="t">Dockline testing and CI</title>
+  <desc id="d">Every pull request runs three GitHub Actions jobs, backend, desktop and end-to-end, before it can be merged to main. No real tokens or accounts are used in any test.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#57606a"/>
+    </marker>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="1199" height="359" rx="14" fill="#f6f8fa" stroke="#d0d7de"/>
+
+  <!-- Pull request -->
+  <rect x="30" y="140" width="150" height="62" rx="8" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
+  <text x="105" y="176" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Pull request</text>
+
+  <!-- GitHub Actions -->
+  <rect x="232" y="28" width="736" height="286" rx="10" fill="#ffffff" stroke="#1a7f37" stroke-width="1.5"/>
+  <text x="252" y="56" font-size="16" font-weight="700" fill="#116329">GitHub Actions</text>
+  <text x="948" y="56" font-size="12.5" fill="#57606a" text-anchor="end">three jobs on every pull request</text>
+
+  <g>
+    <rect x="252" y="72" width="696" height="66" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="270" y="99" font-size="14" font-weight="700" fill="#1f2328">Backend</text>
+    <text x="270" y="121" font-size="12.5" fill="#57606a">JUnit + WireMock + openapi.json drift check</text>
+    <rect x="852" y="93" width="80" height="24" rx="12" fill="#ffffff" stroke="#8c959f"/>
+    <text x="892" y="109.5" font-size="12" font-weight="600" fill="#1f2328" text-anchor="middle">Ubuntu</text>
+
+    <rect x="252" y="150" width="696" height="66" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="270" y="177" font-size="14" font-weight="700" fill="#1f2328">Desktop</text>
+    <text x="270" y="199" font-size="12.5" fill="#57606a">Typecheck, build, Vitest + generated-types drift check</text>
+    <rect x="852" y="171" width="80" height="24" rx="12" fill="#ffffff" stroke="#8c959f"/>
+    <text x="892" y="187.5" font-size="12" font-weight="600" fill="#1f2328" text-anchor="middle">Ubuntu</text>
+
+    <rect x="252" y="228" width="696" height="66" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="270" y="255" font-size="14" font-weight="700" fill="#1f2328">End-to-end</text>
+    <text x="270" y="277" font-size="12.5" fill="#57606a">Playwright drives the real Electron app + real Java backend against fake GitHub/Hostinger</text>
+    <rect x="852" y="249" width="80" height="24" rx="12" fill="#ffffff" stroke="#8c959f"/>
+    <text x="892" y="265.5" font-size="12" font-weight="600" fill="#1f2328" text-anchor="middle">Windows</text>
+  </g>
+
+  <!-- Merge -->
+  <rect x="1020" y="140" width="150" height="62" rx="8" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
+  <text x="1095" y="176" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Merge to main</text>
+
+  <g stroke="#57606a" stroke-width="1.6" fill="none">
+    <line x1="182" y1="171" x2="230" y2="171" marker-end="url(#arrow)"/>
+    <line x1="970" y1="171" x2="1018" y2="171" marker-end="url(#arrow)"/>
+  </g>
+
+  <text x="600" y="341" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">No real tokens or accounts are used in any test.</text>
+</svg>
