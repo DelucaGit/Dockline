@@ -7,7 +7,10 @@ import { isSafeExternalUrl } from './externalUrl'
 // Follow the Windows light/dark setting (Electron's default; explicit for clarity).
 nativeTheme.themeSource = 'system'
 
-const backend = new BackendProcess(app.getAppPath())
+const backend = new BackendProcess(
+  app.getAppPath(),
+  app.isPackaged ? { resourcesPath: process.resourcesPath } : null
+)
 
 // Never leave a Java process behind: quit, normal exit and crashes all stop it.
 app.on('before-quit', () => backend.stop())

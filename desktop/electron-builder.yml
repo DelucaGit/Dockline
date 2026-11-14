@@ -1,0 +1,29 @@
+# Windows installer (NSIS). Build with `npm run dist`; output in dist/.
+appId: se.dockline.app
+productName: Dockline
+directories:
+  output: dist
+# electron-vite bundles the renderer, and main/preload only use Node and Electron built-ins,
+# so no node_modules are shipped.
+files:
+  - out/**
+  - package.json
+  - '!node_modules/**'
+# The backend and its trimmed Java runtime, made by scripts/prepare-backend.js.
+# In the installed app they are in process.resourcesPath (see src/main/backend.ts).
+extraResources:
+  - from: build-resources/backend
+    to: backend
+  - from: build-resources/runtime
+    to: runtime
+win:
+  target: nsis
+  # Not code-signed (out of scope): no signing step and no executable editing that needs winCodeSign.
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createStartMenuShortcut: true
+  createDesktopShortcut: false
+  shortcutName: Dockline
