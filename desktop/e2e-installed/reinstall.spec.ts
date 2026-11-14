@@ -130,9 +130,12 @@ test('settings, logs and tokens survive uninstall + reinstall and installing ove
     })
     const window = await app.firstWindow()
     await expect(window.getByText('Backend connected')).toBeVisible()
-    // The installed app, not a dev build, and its Electron data in the expected user-data folder.
+    // The installed app, not a dev build. Electron's own data (by default %APPDATA%\dockline-desktop,
+    // after the package name) is never in the install folder; in the default mode it is in the temporary folder.
     expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true)
-    expect((await app.evaluate(({ app }) => app.getPath('userData'))).toLowerCase()).toBe(userDataDir.toLowerCase())
+    const electronData = (await app.evaluate(({ app }) => app.getPath('userData'))).toLowerCase()
+    expect(electronData.startsWith(installDir.toLowerCase())).toBe(false)
+    if (!REAL_USER_DATA) expect(electronData).toBe(userDataDir.toLowerCase())
     return window
   }
   const close = async (): Promise<void> => {

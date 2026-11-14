@@ -93,7 +93,7 @@ The installer installs per user (no admin rights), lets the user pick the folder
 | --- | --- |
 | Settings file (manual site–repo links) | `%APPDATA%\Dockline\settings.json` |
 | Log files | `%APPDATA%\Dockline\logs` |
-| Electron's own data (window cache) | `%APPDATA%\Dockline` |
+| Electron's own data (browser cache, named after the package) | `%APPDATA%\dockline-desktop` |
 | GitHub and Hostinger tokens | Windows Credential Manager, service `Dockline` |
 
 So uninstalling and installing again, or installing a newer version over an older one (the installer removes the old app files first), keeps the connections and the manual links. To remove everything, uninstall, delete `%APPDATA%\Dockline` and remove the `Dockline` entries in Credential Manager. A newer app reads a settings file written by an older one by upgrading it (see "Settings file" below; tested in `SettingsFileTest`).
