@@ -118,7 +118,7 @@ class HostingerSiteList {
             problemLog.report(LogLevel.WARN, LogSource.HOSTINGER, ACTION, null, unreachable.message(), request(page),
                     null, e);
             throw new ApiProblem(HttpStatus.BAD_GATEWAY, UNAVAILABLE, "Hostinger is unavailable",
-                    "Could not reach Hostinger. Check your internet connection and try again.");
+                    HostingerStatusProvider.noAnswerMessage(e));
         }
     }
 
