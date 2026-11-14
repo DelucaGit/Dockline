@@ -9,7 +9,7 @@
     "postinstall": "node node_modules/electron/install.js",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "dist": "npm run build && node scripts/prepare-backend.js && electron-builder --win",
+    "dist": "npm run build && node scripts/prepare-backend.js && electron-builder --win --publish never",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
