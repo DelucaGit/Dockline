@@ -1,6 +1,8 @@
 package io.github.delucagit.dockline;
 
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * Base URLs of the external APIs the backend talks to. The real addresses are the defaults
@@ -22,6 +24,9 @@ public record ExternalApiProperties(Github github, Hostinger hostinger) {
         }
     }
 
-    /** Hostinger public API (developers.hostinger.com). */
-    public record Hostinger(String apiUrl) {}
+    /**
+     * Hostinger public API (developers.hostinger.com) and how long to wait for its answer once connected
+     * (default 30 s; Hostinger's builds endpoint can be slow while a site is being deployed).
+     */
+    public record Hostinger(String apiUrl, @DefaultValue("30s") Duration readTimeout) {}
 }

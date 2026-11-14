@@ -121,8 +121,26 @@ class HostingerStatusProvider implements SourceStatusProvider {
                 "Hostinger answered with an error (HTTP " + code + "). Try again later.");
     }
 
+    /** No answer from Hostinger: too slow ({@link HostingerTimeoutException}) or not reachable at all. */
     static SourceStatus unreachable(RestClientException e) {
-        return new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED, "Could not reach Hostinger: " + e.getMessage());
+        String message = e instanceof HostingerTimeoutException timeout
+                ? "Hostinger took too long to answer (more than " + timeout.timeout().toSeconds() + " s)."
+                : "Could not reach Hostinger: " + e.getMessage();
+        return new SourceStatus(Source.HOSTINGER, ConnectionState.LIMITED, message);
+    }
+
+    /** What the user is told when a Hostinger call got no answer (see {@link #unreachable}). */
+    static String noAnswerMessage(RestClientException e) {
+        return e instanceof HostingerTimeoutException
+                ? "Hostinger took too long to answer. Dockline will try again."
+                : "Could not reach Hostinger. Check your internet connection and try again.";
+    }
+
+    /** Like {@link #noAnswerMessage}, when saving a token failed because Hostinger did not answer. */
+    static String tokenNotSavedMessage(RestClientException e) {
+        return e instanceof HostingerTimeoutException
+                ? "Hostinger took too long to answer, so the token was not saved. Try again."
+                : "Could not reach Hostinger, so the token was not saved. Check your internet connection and try again.";
     }
 
     /** Forgets the cached result, so the next {@link #status()} asks Hostinger. */

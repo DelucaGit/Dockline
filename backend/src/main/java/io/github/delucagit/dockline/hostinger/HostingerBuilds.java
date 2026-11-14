@@ -189,7 +189,7 @@ class HostingerBuilds implements DeploySource {
             problemLog.report(LogLevel.WARN, LogSource.HOSTINGER, "GET " + path, null, unreachable.message(),
                     request(path), null, e);
             throw new ApiProblem(HttpStatus.BAD_GATEWAY, HostingerSiteList.UNAVAILABLE, "Hostinger is unavailable",
-                    "Could not reach Hostinger. Check your internet connection and try again.");
+                    HostingerStatusProvider.noAnswerMessage(e));
         }
         if (reply.ok() || reply.noBuilds()) {
             return reply;

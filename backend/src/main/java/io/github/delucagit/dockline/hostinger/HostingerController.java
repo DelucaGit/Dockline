@@ -147,7 +147,7 @@ class HostingerController {
             throw limited;
         } catch (RestClientException e) {
             throw new HostingerTokenException(HttpStatus.BAD_GATEWAY,
-                    "Could not reach Hostinger, so the token was not saved. Check your internet connection and try again.");
+                    HostingerStatusProvider.tokenNotSavedMessage(e));
         }
         if (reply.tokenRejected()) {
             throw new HostingerTokenException(HttpStatus.UNPROCESSABLE_CONTENT,

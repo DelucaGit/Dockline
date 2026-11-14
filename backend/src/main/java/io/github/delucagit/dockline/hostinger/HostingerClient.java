@@ -47,7 +47,8 @@ import org.springframework.web.util.UriUtils;
 class HostingerClient {
 
     static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
-    static final Duration READ_TIMEOUT = Duration.ofSeconds(10);
+    /** Used when {@code dockline.hostinger.read-timeout} is not set; a slower answer throws {@link HostingerTimeoutException}. */
+    static final Duration DEFAULT_READ_TIMEOUT = Duration.ofSeconds(30);
     /**
      * Used to check a token: a cheap read-only list that every account has (an account may have no domains,
      * websites or VPS, but always has a billing context). Answers 200 with a JSON array, 401 for a bad token.
@@ -92,6 +93,7 @@ class HostingerClient {
     private final Clock clock;
     private final ProblemLog problemLog;
     private final Duration defaultRetryAfter;
+    private final Duration readTimeout;
     private final AtomicLong sent = new AtomicLong();
 
     HostingerClient(ExternalApiProperties apis, HostingerRateLimiter limiter, HostingerResponseCache cache,
@@ -105,7 +107,8 @@ class HostingerClient {
         this.defaultRetryAfter = defaultRetryAfter;
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build());
-        factory.setReadTimeout(READ_TIMEOUT);
+        this.readTimeout = hostinger.readTimeout() != null ? hostinger.readTimeout() : DEFAULT_READ_TIMEOUT;
+        factory.setReadTimeout(readTimeout);
         this.http = RestClient.builder().requestFactory(factory).build();
     }
 
@@ -312,12 +315,19 @@ class HostingerClient {
 
     private Reply exchange(String url, String token) {
         sent.incrementAndGet();
-        // A ready-made URI: the address is sent as written, so an encoded domain name is not encoded twice.
-        return http.get().uri(URI.create(url))
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .accept(MediaType.APPLICATION_JSON)
-                .exchange((request, response) -> new Reply(response.getStatusCode().value(), response.getHeaders(),
-                        StreamUtils.copyToString(response.getBody(), StandardCharsets.UTF_8), clock.instant()));
+        try {
+            // A ready-made URI: the address is sent as written, so an encoded domain name is not encoded twice.
+            return http.get().uri(URI.create(url))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .exchange((request, response) -> new Reply(response.getStatusCode().value(), response.getHeaders(),
+                            StreamUtils.copyToString(response.getBody(), StandardCharsets.UTF_8), clock.instant()));
+        } catch (RestClientException e) {
+            if (HostingerTimeoutException.isReadTimeout(e)) {
+                throw new HostingerTimeoutException(readTimeout, e);
+            }
+            throw e;
+        }
     }
 
     /** Hostinger's Retry-After (seconds or an HTTP date), kept within bounds; the default when missing or unreadable. */
