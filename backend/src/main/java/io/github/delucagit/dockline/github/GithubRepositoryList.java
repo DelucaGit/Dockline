@@ -42,14 +42,14 @@ import tools.jackson.databind.ObjectMapper;
  * </ul>
  */
 @Component
-class GithubRepositoryList {
+public class GithubRepositoryList {
 
     /** 50 pages of 100: 5,000 repositories. */
     static final int MAX_PAGES = 50;
-    static final String NOT_CONNECTED = "GITHUB_NOT_CONNECTED";
-    static final String TOKEN_REJECTED = "GITHUB_TOKEN_REJECTED";
-    static final String RATE_LIMITED = "GITHUB_RATE_LIMITED";
-    static final String UNAVAILABLE = "GITHUB_UNAVAILABLE";
+    public static final String NOT_CONNECTED = "GITHUB_NOT_CONNECTED";
+    public static final String TOKEN_REJECTED = "GITHUB_TOKEN_REJECTED";
+    public static final String RATE_LIMITED = "GITHUB_RATE_LIMITED";
+    public static final String UNAVAILABLE = "GITHUB_UNAVAILABLE";
     static final String ACTION = "GET /user/repos";
 
     private static final Comparator<Repository> NEWEST_PUSH_FIRST = Comparator
@@ -72,7 +72,7 @@ class GithubRepositoryList {
         this.clock = clock;
     }
 
-    Repositories list() {
+    public Repositories list() {
         String token = tokenStore.read(Source.GITHUB).orElseThrow(() -> new ApiProblem(HttpStatus.CONFLICT,
                 NOT_CONNECTED, "GitHub is not connected", "Connect to GitHub in Settings to see your repositories."));
         Instant fetchedAt = clock.instant();
