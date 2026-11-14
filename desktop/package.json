@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "generate:api": "openapi-typescript ../backend/openapi.json -o src/renderer/src/api/schema.d.ts",
-    "test:e2e": "electron-vite build && playwright test"
+    "test:e2e": "electron-vite build --mode e2e && playwright test"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.5.0",

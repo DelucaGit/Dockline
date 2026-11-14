@@ -8,7 +8,8 @@ import type { WireMock } from "./wiremock";
  * Hostinger's documented ones: `{ message, correlation_id }`.
  * A website's Git connection (shapes from Hostinger's OpenAPI document) has a fake for each case:
  * `stubGitAutoDeployment` (connected through Hostinger's GitHub app), `stubGitRepositories` (a repository
- * cloned in hPanel's Git section) and `stubGitNotConnected`.
+ * cloned in hPanel's Git section) and `stubGitNotConnected`. A Node.js website's build history (its deploys)
+ * is `stubBuilds`, with `stubBuildsServerError` and `stubBuildsRateLimited` for the failures.
  * The backend tests use the same fakes (backend/src/test/.../hostinger/HostingerStubs.java).
  *
  * A later stub for the same endpoint wins, so a test can change Hostinger's answer between two calls.
@@ -499,4 +500,107 @@ export async function stubGitServerError(
       },
     });
   }
+}
+
+export function nodejsBuildsPath(domain: string, username = DEFAULT_USERNAME): string {
+  return `/api/hosting/v1/accounts/${username}/websites/${domain}/nodejs/builds`;
+}
+
+/** One build as the tests describe it; `stubBuilds` turns it into Hostinger's JSON. */
+export interface FakeBuild {
+  state: "completed" | "failed" | "pending" | "running";
+  /** Full commit hash; the app shows its first 7 characters. */
+  commit?: string;
+  message?: string;
+  createdAt?: string;
+}
+
+/**
+ * The Node.js build history of a website (`stubSites` with `websiteType: "nodejs"`), all on page 1:
+ * `{ data: [...], meta: { current_page, per_page, total } }`, as Hostinger answers it.
+ */
+export async function stubBuilds(
+  wiremock: WireMock,
+  domain: string,
+  builds: FakeBuild[],
+  username = DEFAULT_USERNAME,
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: nodejsBuildsPath(domain, username) },
+    response: {
+      status: 200,
+      jsonBody: {
+        data: builds.map((b, i) => {
+          const created = b.createdAt ?? `2026-05-0${(i % 9) + 1}T10:00:00Z`;
+          return {
+            uuid: `0190a1b2-0000-7000-8000-00000000000${i % 10}`,
+            state: b.state,
+            options: {
+              source_type: "git",
+              source_options: {
+                owner: "octocat",
+                repository: "my-site",
+                branch: "main",
+                commit: {
+                  hash: b.commit ?? "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+                  message: b.message ?? "Initial commit",
+                },
+              },
+            },
+            created_at: created,
+            updated_at: created,
+          };
+        }),
+        meta: { current_page: 1, per_page: 100, total: builds.length },
+      },
+    },
+  });
+}
+
+/** The builds endpoint of the website answers 500. */
+export async function stubBuildsServerError(
+  wiremock: WireMock,
+  domain: string,
+  username = DEFAULT_USERNAME,
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: nodejsBuildsPath(domain, username) },
+    response: {
+      status: 500,
+      jsonBody: {
+        message: "Server Error",
+        correlation_id: "c0ffee00-0000-4000-8000-000000000041",
+      },
+    },
+  });
+}
+
+/** The builds endpoint of the website answers 429 with Retry-After. */
+export async function stubBuildsRateLimited(
+  wiremock: WireMock,
+  domain: string,
+  retryAfterSeconds = 30,
+  username = DEFAULT_USERNAME,
+): Promise<void> {
+  await wiremock.stubFor({
+    request: { method: "GET", urlPath: nodejsBuildsPath(domain, username) },
+    response: {
+      status: 429,
+      headers: { "Retry-After": String(retryAfterSeconds) },
+      jsonBody: {
+        message: "Too Many Attempts.",
+        correlation_id: "c0ffee00-0000-4000-8000-000000000042",
+      },
+    },
+  });
+}
+
+/** How many requests WireMock received for the website's builds so far. */
+export async function countBuildsRequests(
+  wiremock: WireMock,
+  domain: string,
+  username = DEFAULT_USERNAME,
+): Promise<number> {
+  const path = nodejsBuildsPath(domain, username);
+  return (await wiremock.requests()).filter((r) => r.url.split("?")[0] === path).length;
 }
