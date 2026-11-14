@@ -59,6 +59,9 @@ test("the renderer can list (fake) Hostinger domains and gets a clear problem fo
 }) => {
   const { window } = await launchApp(hostingerEnv(wiremock));
   await expect(window.getByText("Backend connected")).toBeVisible();
+  // Leave the start page: Overview refreshes itself and would ask Hostinger too,
+  // which adds requests and log entries this test counts.
+  await window.getByRole("link", { name: "Log" }).click();
   const seen: string[] = [];
   const call = async (
     path: string,

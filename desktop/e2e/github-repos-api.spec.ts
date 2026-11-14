@@ -48,6 +48,9 @@ test('the renderer can list (fake) GitHub repositories and gets a clear problem 
   await stubUser(wiremock)
   const { window } = await launchApp(githubEnv(wiremock))
   await expect(window.getByText('Backend connected')).toBeVisible()
+  // Leave the start page: Overview refreshes itself and would ask GitHub for the repositories too,
+  // which adds requests and log entries this test counts.
+  await window.getByRole('link', { name: 'Log' }).click()
   const seen: string[] = []
   const call = async (path: string, method = 'GET'): Promise<Reply> => {
     const reply = await api(window, method, path)

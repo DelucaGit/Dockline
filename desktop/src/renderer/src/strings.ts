@@ -87,6 +87,47 @@ export const strings = {
     // {domain} is replaced with the site's domain.
     openSite: 'Open {domain}'
   },
+  overview: {
+    title: 'Overview',
+    sites: 'Sites',
+    repos: 'Repos',
+    problems: 'Problems',
+    showSites: 'Show all sites',
+    showRepos: 'Show all repos',
+    showProblems: 'Show the problems',
+    notCounted: '—',
+    loading: 'Loading…',
+    loadError: 'Could not load the overview.',
+    loadErrorHint: 'Please try again in a moment.',
+    nothingConnected: 'Nothing is connected yet',
+    nothingConnectedHint: 'Connect GitHub and add your Hostinger token in Settings to see your sites, repos and deploys here.',
+    goToSettings: 'Open Settings',
+    noProblems: 'No problems found',
+    problemsIncomplete: 'Some checks could not be made, so the list may be incomplete.',
+    deploysHeading: 'Latest deploys',
+    noDeploys: 'No deploys yet',
+    sourcesHeading: 'Sources',
+    github: 'GitHub',
+    hostinger: 'Hostinger',
+    state: {
+      CONNECTED: 'Connected',
+      LIMITED: 'Connected, with limits',
+      ERROR: 'Connection problem',
+      NOT_CONNECTED: 'Not connected'
+    },
+    reconnect: 'Reconnect',
+    replaceToken: 'Replace token',
+    // {seconds} is replaced with the seconds left.
+    rateLimited: 'Rate limited, retrying in {seconds} s',
+    problemKind: {
+      DEPLOY_FAILED: 'Deploy failed',
+      DOMAIN_EXPIRED: 'Domain expired',
+      DOMAIN_EXPIRING: 'Domain expiring soon',
+      LINK_BROKEN: 'Linked repo missing',
+      SOURCE_NOT_CONNECTED: 'Not connected',
+      SOURCE_FAILING: 'Source not working'
+    }
+  },
   site: {
     back: 'Back to Sites',
     repoHeading: 'Linked repo',
