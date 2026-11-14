@@ -111,3 +111,44 @@ jobs:
           name: e2e-test-results
           path: desktop/test-results/
           if-no-files-found: ignore
+
+  installer-smoke:
+    name: Installer smoke test (Windows)
+    # Builds the real installer, installs it silently, starts the installed app against WireMock,
+    # then uninstalls, reinstalls and installs over it, checking that the settings and tokens are kept.
+    # The runner is thrown away afterwards, so the test may use the real %APPDATA%\Dockline and the
+    # real Windows Credential Manager (DOCKLINE_SMOKE_REAL_USER_DATA=1); it removes its tokens at the end.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install desktop dependencies
+        run: npm ci
+      # Builds the app, the backend jar and its jlink runtime, then the NSIS installer (dist/).
+      - name: Build the installer
+        run: npm run dist
+      - name: Install, start, uninstall and reinstall the app (Playwright)
+        env:
+          DOCKLINE_SMOKE_REAL_USER_DATA: '1'
+        run: npm run test:installed
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-test-results
+          path: desktop/test-results/
+          if-no-files-found: ignore

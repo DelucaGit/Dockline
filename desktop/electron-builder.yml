@@ -27,3 +27,7 @@ nsis:
   createStartMenuShortcut: true
   createDesktopShortcut: false
   shortcutName: Dockline
+  # User data (settings.json, logs) lives in %APPDATA%\Dockline and tokens in Windows Credential Manager,
+  # never in the install folder. The uninstaller leaves both, so reinstalling or upgrading keeps the
+  # user's connections and manual links (also the default; set explicitly so it is not changed by accident).
+  deleteAppDataOnUninstall: false

@@ -87,6 +87,23 @@ cd desktop && npm run dev
 
 The installer installs per user (no admin rights), lets the user pick the folder, adds a Start menu entry and a normal uninstaller (also in Windows *Installed apps*). It is not code-signed, so Windows SmartScreen may warn on first run. `desktop/build-resources/` and `desktop/dist/` are git-ignored.
 
+**User data survives uninstall, reinstall and upgrade.** The install folder only holds the app, the jar and the runtime. Everything that belongs to the user lives elsewhere and is never touched by the installer or the uninstaller (`deleteAppDataOnUninstall: false` in `electron-builder.yml`):
+
+| What | Where |
+| --- | --- |
+| Settings file (manual site–repo links) | `%APPDATA%\Dockline\settings.json` |
+| Log files | `%APPDATA%\Dockline\logs` |
+| Electron's own data (window cache) | `%APPDATA%\Dockline` |
+| GitHub and Hostinger tokens | Windows Credential Manager, service `Dockline` |
+
+So uninstalling and installing again, or installing a newer version over an older one (the installer removes the old app files first), keeps the connections and the manual links. To remove everything, uninstall, delete `%APPDATA%\Dockline` and remove the `Dockline` entries in Credential Manager. A newer app reads a settings file written by an older one by upgrading it (see "Settings file" below; tested in `SettingsFileTest`).
+
+**Installer smoke test.** `npm run test:installed` in `desktop/` (after `npm run dist`; Windows only; config `playwright.installed.config.ts`, test `e2e-installed/reinstall.spec.ts`) installs the built installer silently (`/S /D=<temp folder>`) and starts the **installed** `Dockline.exe` with Playwright against WireMock. It checks that the backend starts and that every main view opens, connects GitHub and Hostinger and saves a manual link, and checks that `settings.json` and the log file are in the app-data folder and not in the install folder. Then it uninstalls (`Uninstall Dockline.exe /S`), installs again and installs once more over the existing install, and after each step checks that the link is still there (settings file, API and Sites view). It uninstalls at the end. `DOCKLINE_INSTALLER` points it at another installer.
+
+- By default the app gets a temporary `APPDATA` and Electron user-data folder and keeps tokens in memory, so the real `%APPDATA%\Dockline` and Credential Manager are never touched; the tokens are entered again after each reinstall.
+- With `DOCKLINE_SMOKE_REAL_USER_DATA=1` (CI only, on a throwaway runner) it uses the real `%APPDATA%\Dockline` and the real Credential Manager, so it also proves that the tokens survive; it refuses to start if a settings file already exists there and removes its tokens at the end.
+- Not covered: a real version bump (the reinstall uses the same version; settings-format upgrades are covered by `SettingsFileTest`), the interactive installer pages, and a per-machine install.
+
 ### External API addresses
 
 The backend reads the base URLs of the external APIs from Spring properties. The defaults are the real APIs; tests point them at a fake server (WireMock) through environment variables, which the desktop app passes on to the backend:
@@ -348,5 +365,6 @@ npx playwright test e2e/app-start.spec.ts     # one file only (after a build)
 | Backend build + tests | Linux | `./mvnw verify`; fails if the committed `openapi.json` is out of date |
 | Desktop typecheck, build + unit tests | Linux | `npm run build`, `npm test`; fails if `schema.d.ts` does not match `openapi.json` |
 | End-to-end tests | Windows | builds the jar and runs `npm run test:e2e` (Dockline is a Windows app) |
+| Installer smoke test | Windows | `npm run dist`, then `npm run test:installed` with the real app-data folder and Credential Manager of the throwaway runner |
 
 No secrets or real tokens are used; external APIs are only ever faked.
