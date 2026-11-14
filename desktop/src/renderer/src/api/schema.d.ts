@@ -209,6 +209,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sites/deploys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The latest deploy of every site, for the Sites list
+         * @description For each Hostinger website with a domain: the status, time and commit of its latest deploy. Deploy information exists only for Node.js websites (`website_type` nodejs), from Hostinger's build history (source HOSTINGER); every other website, and a Node.js website that was never built, has status NONE and source NONE, and costs no Hostinger request. A Node.js website costs one Hostinger request (two with more than 100 builds). The answers are kept for 20 seconds, so calling this every 30 seconds shows changes; `refresh=true` asks Hostinger again at once. The website list itself is the copy saved in the last 60 s. A failure for one site does not fail the request: that site has status UNKNOWN and one entry in its `problems` (codes HOSTINGER_UNAVAILABLE, HOSTINGER_RATE_LIMITED with `retryAfterSeconds`, HOSTINGER_TOKEN_REJECTED, HOSTINGER_NOT_CONNECTED), and the failure is written to the Log section. After a rate limit or a rejected token Hostinger is not asked about the remaining sites in that call: they are answered from the saved answers, or get the same problem. Only when the website list itself cannot be read is the answer a problem response, with the same codes as GET /api/hostinger/sites.
+         */
+        get: operations["listSiteDeploys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/log": {
         parameters: {
             query?: never;
@@ -465,6 +485,61 @@ export interface components {
             complete: boolean;
             /** @description Set when Hostinger could not be asked (GitHub is never asked for this list); empty otherwise */
             problems: components["schemas"]["SiteSourceProblem"][];
+        };
+        /** @description The latest deploy of one site */
+        SiteDeploy: {
+            /**
+             * @description The site's domain, lower case
+             * @example example.com
+             */
+            domain: string;
+            status: components["schemas"]["SiteDeployStatus"];
+            /**
+             * Format: date-time
+             * @description When the deploy last changed state (ISO-8601, UTC): when it finished for SUCCEEDED and FAILED, its latest step for IN_PROGRESS; null when status is NONE, when the source could not be asked, or when the source gives no time
+             * @example 2024-05-29T05:51:02Z
+             */
+            at: string | null;
+            /** @description The commit that was deployed; null when not known (no deploy, a deploy that has not fetched the repository yet, or one from an uploaded archive) */
+            commit: components["schemas"]["SiteDeployCommit"];
+            /** @description NONE exactly when status is NONE; HOSTINGER otherwise, also when Hostinger was asked and failed (status UNKNOWN) */
+            source: components["schemas"]["SiteDeploySource"];
+            /** @description Why this site's deploy could not be read: at most one HOSTINGER entry (status is then UNKNOWN); empty when the source answered */
+            problems: components["schemas"]["SiteSourceProblem"][];
+        };
+        /** @description The Git commit a deploy was built from */
+        SiteDeployCommit: {
+            /**
+             * @description The full commit hash
+             * @example a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0
+             */
+            sha: string;
+            /**
+             * @description The commit message; null when the source gives none
+             * @example Initial commit
+             */
+            message: string | null;
+        };
+        /**
+         * @description Where the deploy information comes from. HOSTINGER: Hostinger's build history of a Node.js website. NONE: no source has deploy information for this site.
+         * @enum {string}
+         */
+        SiteDeploySource: "HOSTINGER" | "NONE";
+        /**
+         * @description How a site's latest deploy went. SUCCEEDED: it finished and is live. FAILED: it failed. IN_PROGRESS: it is waiting or running. UNKNOWN: there may be a deploy, but its status is not known: the source could not be asked (see the site's problems) or reported a state Dockline does not know. NONE: no deploy information exists for this site (it is not a Node.js website, or it was never built).
+         * @enum {string}
+         */
+        SiteDeployStatus: "SUCCEEDED" | "FAILED" | "IN_PROGRESS" | "UNKNOWN" | "NONE";
+        /** @description The latest deploy of every site, for the Sites list */
+        SiteDeploys: {
+            /** @description One entry per Hostinger website that has a domain, sorted by domain */
+            deploys: components["schemas"]["SiteDeploy"][];
+            /**
+             * Format: date-time
+             * @description When Dockline fetched the deploy information from Hostinger (ISO-8601, UTC): the oldest answer used, up to 20 s old when saved copies were reused; the time of the request when Hostinger was not asked about any site
+             * @example 2026-11-13T09:00:00Z
+             */
+            fetchedAt: string;
         };
         /** @enum {string} */
         LogSource: "GITHUB" | "HOSTINGER" | "BACKEND";
@@ -1024,6 +1099,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SiteLinks"];
+                };
+            };
+        };
+    };
+    listSiteDeploys: {
+        parameters: {
+            query?: {
+                /** @description True skips the deploy answers saved in the last 20 seconds and asks Hostinger again about every Node.js website (counts towards the 50 requests per minute) */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The latest deploy per site, sorted by domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDeploys"];
+                };
+            };
+            /** @description code HOSTINGER_NOT_CONNECTED: no Hostinger token saved; code HOSTINGER_TOKEN_REJECTED: Hostinger rejected the saved token (revoked or expired), replace it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code HOSTINGER_RATE_LIMITED: Hostinger's rate limit is reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description code HOSTINGER_UNAVAILABLE: Hostinger could not be reached, timed out, failed or answered unexpectedly */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
         };

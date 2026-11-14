@@ -30,6 +30,7 @@ import org.springframework.web.util.UriUtils;
  * Every Hostinger call goes through {@link #send}, so every feature shares one request cap
  * ({@link HostingerRateLimiter}: 50 a minute, extra requests wait) and data reads share one cache
  * ({@link HostingerResponseCache}: 60 seconds, {@link #GIT_TTL} for a website's Git connection,
+ * {@link #BUILDS_TTL} for a website's Node.js builds,
  * {@link #RENEWAL_TTL} for a domain's renewal information). Every answer comes back as a {@link Reply}, whatever its status; only network
  * failures (no answer at all, including timeouts, or the cap staying full) throw {@link RestClientException}.
  *
@@ -68,6 +69,13 @@ class HostingerClient {
      * domain is renewed, and asking costs one request per domain.
      */
     static final Duration RENEWAL_TTL = Duration.ofMinutes(5);
+    /**
+     * How long an answer about a website's Node.js builds is reused: short, so the Sites view's automatic refresh
+     * (every 30 seconds) shows a build that started or finished.
+     */
+    static final Duration BUILDS_TTL = Duration.ofSeconds(20);
+    /** The largest page Hostinger allows for a website's builds. */
+    static final int BUILDS_PER_PAGE = 100;
     /** The largest page Hostinger allows for the website list. */
     static final int WEBSITES_PER_PAGE = 100;
     /** The first request plus up to two retries after Hostinger's 429. */
@@ -109,6 +117,11 @@ class HostingerClient {
 
         /** 404 or 422 on a Git path: Hostinger saying the website has no Git at all. */
         boolean noGit() {
+            return status == 404 || status == 422;
+        }
+
+        /** 404 or 422 on the builds path: Hostinger saying the website has no Node.js builds. */
+        boolean noBuilds() {
             return status == 404 || status == 422;
         }
 
@@ -209,6 +222,36 @@ class HostingerClient {
     /** The saved answer {@link #getGit} would reuse, if there is one; Hostinger is never asked. */
     Optional<Reply> savedGit(String path, String token) {
         return cache.get("GET", hostinger.apiUrl() + path, token, GIT_TTL);
+    }
+
+    /** The builds (deploys) of a Node.js website, without the paging query. */
+    static String nodejsBuildsPath(String username, String domain) {
+        return "/api/hosting/v1/accounts/" + username + "/websites/" + domain + "/nodejs/builds";
+    }
+
+    String nodejsBuildsUrl(String username, String domain, int page) {
+        return hostinger.apiUrl() + nodejsBuildsPath(username, domain) + "?page=" + page + "&per_page="
+                + BUILDS_PER_PAGE;
+    }
+
+    /**
+     * One page (1-based) of a Node.js website's builds, {@value #BUILDS_PER_PAGE} per page. A successful answer
+     * younger than {@link #BUILDS_TTL} is reused; {@code refresh} skips it and saves the new answer. A 404 or 422
+     * ("no builds on this website") is kept the same way. The caller makes sure the username and domain hold no
+     * characters that need encoding.
+     */
+    Reply getNodejsBuilds(String username, String domain, int page, String token, boolean refresh) {
+        String url = nodejsBuildsUrl(username, domain, page);
+        Reply reply = cachedGet(url, nodejsBuildsPath(username, domain), token, refresh, BUILDS_TTL);
+        if (reply.noBuilds()) {
+            cache.putAny("GET", url, token, reply);
+        }
+        return reply;
+    }
+
+    /** The saved answer {@link #getNodejsBuilds} would reuse, if there is one; Hostinger is never asked. */
+    Optional<Reply> savedNodejsBuilds(String username, String domain, int page, String token) {
+        return cache.get("GET", nodejsBuildsUrl(username, domain, page), token, BUILDS_TTL);
     }
 
     /** How many requests have left for Hostinger since the app started (answers reused from the cache do not count). */
