@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.List;
 
 /** The request and response shapes of the GitHub endpoints. */
-final class GithubApi {
+public final class GithubApi {
 
     private GithubApi() {}
 
@@ -51,13 +51,13 @@ final class GithubApi {
     }
 
     @Schema(name = "GithubVisibility", enumAsRef = true, description = "PRIVATE: only people with access see it. PUBLIC: anyone can.")
-    enum Visibility {
+    public enum Visibility {
         PRIVATE,
         PUBLIC
     }
 
     @Schema(name = "GithubRepository", description = "One repository the user owns, collaborates on or sees through an organization")
-    record Repository(
+    public record Repository(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "dockline") String name,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "octocat/dockline",
                     description = "owner/name") String fullName,
@@ -70,7 +70,7 @@ final class GithubApi {
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Archived (read-only) on GitHub") boolean archived) {}
 
     @Schema(name = "GithubRepositories", description = "The user's repositories, fetched from GitHub just now")
-    record Repositories(
+    public record Repositories(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
                     description = "Most recently pushed first; never-pushed ones last") List<Repository> repositories,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "2026-11-13T09:00:00Z",

@@ -229,6 +229,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything the Overview page shows, in one call
+         * @description Always answers 200. Built from the same data as the other views, with their saved copies and the Hostinger cap of 50 requests per minute: the website list and the domains (copies up to 60 s old), the deploys (20 s), the sites' Git connections (five minutes, as in GET /api/sites/links) and the GitHub repositories (asked on every call, as in GET /api/github/repositories). Problems are failed latest deploys, expired domains and domains expiring within 30 days, broken site–repo links (a linked repository that is not among the user's GitHub repositories; not checked when the repository list is truncated) and sources that are not connected or not working fully. A source that cannot be asked does not fail the request: each part that needs it has an entry in its `errors` (codes HOSTINGER_NOT_CONNECTED, HOSTINGER_TOKEN_REJECTED, HOSTINGER_RATE_LIMITED, HOSTINGER_UNAVAILABLE, GITHUB_NOT_CONNECTED, GITHUB_TOKEN_REJECTED, GITHUB_RATE_LIMITED, GITHUB_UNAVAILABLE), and the parts of the other source are still filled. Failures are written to the Log section by the views' own code, and update `sources` at once.
+         */
+        get: operations["getOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/log": {
         parameters: {
             query?: never;
@@ -540,6 +560,95 @@ export interface components {
              * @example 2026-11-13T09:00:00Z
              */
             fetchedAt: string;
+        };
+        /** @description Everything the Overview page shows, in one answer. Each part carries its own errors, so one failing source does not hide the parts of the other */
+        Overview: {
+            /** @description The number of Hostinger websites (as in the Sites list) */
+            sites: components["schemas"]["OverviewCount"];
+            /** @description The number of GitHub repositories (as in the Repos list) */
+            repos: components["schemas"]["OverviewCount"];
+            problems: components["schemas"]["OverviewProblems"];
+            latestDeploys: components["schemas"]["OverviewDeploys"];
+            /** @description The connection state of every source, as in GET /api/status: always GITHUB, then HOSTINGER */
+            sources: components["schemas"]["SourceStatus"][];
+            /**
+             * Format: date-time
+             * @description When the oldest data used was fetched from its source (ISO-8601, UTC), up to 60 s old when saved copies were reused; the time of the request when no source answered
+             * @example 2026-11-13T09:00:00Z
+             */
+            fetchedAt: string;
+        };
+        /** @description A number on the Overview page, or why it could not be counted */
+        OverviewCount: {
+            /**
+             * Format: int32
+             * @description The number; null when its source could not be asked (see errors)
+             * @example 3
+             */
+            count: number | null;
+            /** @description Why the number is missing: at most one entry, from the source it comes from; empty when the source answered */
+            errors: components["schemas"]["SiteSourceProblem"][];
+        };
+        /** @description One recent deploy */
+        OverviewDeploy: {
+            /**
+             * @description The site's domain, lower case
+             * @example example.com
+             */
+            domain: string;
+            /** @description SUCCEEDED, FAILED, IN_PROGRESS or UNKNOWN (a state Dockline does not know); never NONE */
+            status: components["schemas"]["SiteDeployStatus"];
+            /**
+             * Format: date-time
+             * @description When the deploy last changed state (ISO-8601, UTC)
+             * @example 2024-05-29T05:51:02Z
+             */
+            at: string;
+            /** @description The commit that was deployed; null when not known */
+            commit: components["schemas"]["SiteDeployCommit"];
+        };
+        /** @description The latest deploys across all sites */
+        OverviewDeploys: {
+            /** @description The latest deploy of each site that has one with a known time, newest first, at most 10 */
+            deploys: components["schemas"]["OverviewDeploy"][];
+            /** @description Why deploys may be missing: one entry per Hostinger problem code met (the website list, or one or more sites' deploys); empty when Hostinger answered for every site */
+            errors: components["schemas"]["SiteSourceProblem"][];
+        };
+        /** @description One thing that needs attention */
+        OverviewProblem: {
+            kind: components["schemas"]["OverviewProblemKind"];
+            /** @description The source the problem is about: HOSTINGER for deploys and domains, GITHUB for broken links, the source itself for SOURCE_NOT_CONNECTED and SOURCE_FAILING */
+            source: components["schemas"]["Source"];
+            /**
+             * @description The site or domain, lower case; null for SOURCE_* problems
+             * @example example.com
+             */
+            domain: string | null;
+            /**
+             * @description For LINK_BROKEN: the linked repository (owner/name); null otherwise
+             * @example octocat/my-site
+             */
+            repoFullName: string | null;
+            /**
+             * Format: date-time
+             * @description For DEPLOY_FAILED: when the deploy failed; for DOMAIN_EXPIRED and DOMAIN_EXPIRING: the expiry date, null when Hostinger gives none; null otherwise (ISO-8601, UTC)
+             * @example 2026-12-01T00:00:00Z
+             */
+            at: string | null;
+            /** @description For the user */
+            message: string;
+        };
+        /**
+         * @description What needs attention. DEPLOY_FAILED: a site's latest deploy failed. DOMAIN_EXPIRED: a domain has expired (Hostinger says so, or its expiry date is past). DOMAIN_EXPIRING: a domain expires within the next 30 days. LINK_BROKEN: a site is linked to a repository that is not among the user's GitHub repositories (deleted, renamed, or not accessible). SOURCE_NOT_CONNECTED: GitHub or Hostinger is not connected. SOURCE_FAILING: GitHub or Hostinger is connected but not working fully (rate limited, token rejected, unavailable).
+         * @enum {string}
+         */
+        OverviewProblemKind: "DEPLOY_FAILED" | "DOMAIN_EXPIRED" | "DOMAIN_EXPIRING" | "LINK_BROKEN" | "SOURCE_NOT_CONNECTED" | "SOURCE_FAILING";
+        /** @description Everything that needs attention */
+        OverviewProblems: {
+            /** @description SOURCE_* problems first (GitHub, then Hostinger), then DEPLOY_FAILED (newest first), DOMAIN_EXPIRED, DOMAIN_EXPIRING (earliest expiry first) and LINK_BROKEN (by domain) */
+            items: components["schemas"]["OverviewProblem"][];
+            /** @description The checks that could not be made, at most one entry per source and code: the items may then be incomplete. Empty when every check could be made */
+            errors: components["schemas"]["SiteSourceProblem"][];
         };
         /** @enum {string} */
         LogSource: "GITHUB" | "HOSTINGER" | "BACKEND";
@@ -1149,6 +1258,29 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    getOverview: {
+        parameters: {
+            query?: {
+                /** @description True skips the saved copies of the website list, the domains and the deploys and asks Hostinger again (counts towards the 50 requests per minute); the Git connections keep their five-minute copies */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The overview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Overview"];
                 };
             };
         };
