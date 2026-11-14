@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { strings } from '@/strings'
 import { routes } from '@/routes'
 import { LogPage } from '@/pages/LogPage'
+import { OverviewPage } from '@/pages/OverviewPage'
 import { Placeholder } from '@/pages/Placeholder'
 import { ReposPage } from '@/pages/ReposPage'
 import { DomainsPage } from '@/pages/DomainsPage'
@@ -13,6 +14,7 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { Connections } from '@/components/Connections'
 
 function pageElement(path: string, page: { title: string; empty: string }, baseUrl?: string) {
+  if (baseUrl && path === '/overview') return <OverviewPage baseUrl={baseUrl} />
   if (baseUrl && path === '/log') return <LogPage baseUrl={baseUrl} />
   if (baseUrl && path === '/repos') return <ReposPage baseUrl={baseUrl} />
   if (baseUrl && path === '/sites') return <SitesPage baseUrl={baseUrl} />
