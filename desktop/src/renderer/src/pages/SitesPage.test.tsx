@@ -3,6 +3,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SiteDeploy, SiteDeploys } from '@/api/deploys'
 import type { HostingerSite, HostingerSites } from '@/api/hostinger'
 import type { SiteLink, SiteLinks } from '@/api/sites'
 import { SitesPage } from './SitesPage'
@@ -37,13 +38,32 @@ const link = (domain: string, fullName: string | null, extra: Partial<SiteLink> 
   ...extra
 })
 
+const deploys = (...list: SiteDeploy[]): SiteDeploys => ({ deploys: list, fetchedAt: '2026-11-14T09:00:00Z' })
+
+/** What GET /api/sites/deploys answers, consumed in order (the last one repeats); "no deploys" by default. */
+let deployAnswers: (SiteDeploys | Response)[] = [deploys()]
+
+const deploy = (domain: string, status: SiteDeploy['status'], extra: Partial<SiteDeploy> = {}): SiteDeploy => ({
+  domain,
+  status,
+  at: '2024-05-29T05:51:02Z',
+  commit: { sha: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0', message: 'Initial commit' },
+  source: 'HOSTINGER',
+  problems: [],
+  ...extra
+})
+
+const noDeploy = (domain: string): SiteDeploy => deploy(domain, 'NONE', { at: null, commit: null, source: 'NONE' })
+
 /**
  * The only fakes: the backend's HTTP API and the preload bridge. The answers are for GET /api/hostinger/sites,
- * consumed in order (the last one repeats); `urls` holds those calls and `linkUrls` the calls for the links.
+ * consumed in order (the last one repeats); `urls` holds those calls, `linkUrls` the calls for the links and
+ * `deployUrls` the calls for the deploys.
  */
 function setup(...answers: Answer[]) {
   const urls: string[] = []
   const linkUrls: string[] = []
+  const deployUrls: string[] = []
   const openExternal = vi.fn(async () => {})
   window.dockline = { getBackendState: vi.fn(), retryBackend: vi.fn(), openExternal }
   vi.stubGlobal(
@@ -53,12 +73,17 @@ function setup(...answers: Answer[]) {
         linkUrls.push(url)
         return linksAnswer instanceof Response ? linksAnswer.clone() : new Response(JSON.stringify(linksAnswer))
       }
+      if (url.includes('/api/sites/deploys')) {
+        deployUrls.push(url)
+        const d = deployAnswers[Math.min(deployUrls.length - 1, deployAnswers.length - 1)]
+        return d instanceof Response ? d.clone() : new Response(JSON.stringify(d))
+      }
       urls.push(url)
       const a = answers[Math.min(urls.length - 1, answers.length - 1)]
       return a instanceof Response ? a.clone() : new Response(JSON.stringify(a))
     })
   )
-  return { urls, linkUrls, openExternal }
+  return { urls, linkUrls, deployUrls, openExternal }
 }
 
 const list = (sites: HostingerSite[], extra: Partial<HostingerSites> = {}): HostingerSites => ({
@@ -78,7 +103,7 @@ function Where() {
 
 function renderPage(retry: number | false = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry, retryDelay: 0 } } })
-  render(
+  return render(
     <MemoryRouter initialEntries={['/sites']}>
       <QueryClientProvider client={client}>
         <SitesPage baseUrl={BASE_URL} />
@@ -92,6 +117,7 @@ describe('SitesPage', () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
     linksAnswer = NO_LINKS
+    deployAnswers = [deploys()]
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -258,6 +284,208 @@ describe('SitesPage', () => {
       expect(await screen.findByRole('button', { name: 'octo/site-a' })).toBeInTheDocument()
       await user.click(screen.getByRole('button', { name: 'Refresh' }))
       await waitFor(() => expect(fake.linkUrls.length).toBeGreaterThanOrEqual(2))
+    })
+  })
+
+  describe('deploy status', () => {
+    const DEPLOYS_URL = `${BASE_URL}/api/sites/deploys?refresh=false`
+    let visibility: DocumentVisibilityState = 'visible'
+
+    const setVisibility = (state: DocumentVisibilityState) => {
+      visibility = state
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange', { bubbles: true }))
+      })
+    }
+    const advance = (ms: number) =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(ms)
+      })
+    // Only what the automatic refresh uses; fetch and the test's own waits stay real.
+    const fakeClock = () => vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+
+    beforeEach(() => {
+      visibility = 'visible'
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+      vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+    })
+    afterEach(() => {
+      Reflect.deleteProperty(document, 'visibilityState')
+      vi.restoreAllMocks()
+    })
+
+    it('shows badge, time, short commit and source for a succeeded deploy', async () => {
+      deployAnswers = [deploys(deploy('app.example', 'SUCCEEDED'))]
+      setup(list([site('APP.example', { websiteType: 'nodejs' })]))
+      renderPage()
+      const badge = await screen.findByTestId('deploy-badge')
+      const row = screen.getByTestId('site-row')
+      expect(row).toContainElement(badge)
+      expect(badge).toHaveTextContent('Succeeded')
+      expect(row.querySelector('time')).toHaveAttribute('datetime', '2024-05-29T05:51:02Z')
+      expect(row.querySelector('time')).toHaveTextContent(/ago$/)
+      const commit = screen.getByTestId('deploy-commit')
+      expect(commit).toHaveTextContent(/^a1b2c3d$/)
+      expect(commit).toHaveAttribute('title', 'Initial commit')
+      expect(row).toHaveTextContent('Hostinger')
+      expect(row).not.toHaveTextContent('No deploy information')
+    })
+
+    it('shows failed, in-progress and unknown badges; a commit without a message has no tooltip', async () => {
+      deployAnswers = [
+        deploys(
+          deploy('a.com', 'FAILED', { commit: { sha: 'ffffffffffffffff', message: null } }),
+          deploy('b.com', 'IN_PROGRESS', { commit: null }),
+          deploy('c.com', 'UNKNOWN', { at: null, commit: null })
+        )
+      ]
+      setup(list([site('a.com'), site('b.com'), site('c.com')]))
+      renderPage()
+      await screen.findAllByTestId('deploy-badge')
+      const rows = screen.getAllByTestId('site-row')
+      expect(rows[0]).toHaveTextContent('Failed')
+      expect(rows[0].querySelector('[data-testid="deploy-commit"]')).not.toHaveAttribute('title')
+      expect(rows[1]).toHaveTextContent('In progress')
+      expect(rows[1].querySelector('[data-testid="deploy-commit"]')).toBeNull()
+      expect(rows[2]).toHaveTextContent('Unknown')
+      expect(rows[2].querySelector('time')).toBeNull()
+    })
+
+    it('a site that is not a Node.js website, or has no entry, shows "No deploy information"', async () => {
+      deployAnswers = [deploys(noDeploy('blog.example'))]
+      setup(list([site('blog.example'), site('other.example'), site(null)]))
+      renderPage()
+      await screen.findAllByText('No deploy information')
+      for (const row of screen.getAllByTestId('site-row')) {
+        expect(row).toHaveTextContent('No deploy information')
+        expect(row.querySelector('[data-testid="deploy-badge"]')).toBeNull()
+      }
+    })
+
+    it('a failing deploys call leaves the list and the links intact, with no alert', async () => {
+      linksAnswer = { links: [link('a.com', 'octo/site-a')], complete: true, problems: [] }
+      deployAnswers = [problem(502, 'HOSTINGER_UNAVAILABLE', 'down')]
+      const fake = setup(list([site('a.com'), site('b.com')]))
+      renderPage()
+      expect(await screen.findByRole('button', { name: 'octo/site-a' })).toBeInTheDocument()
+      await waitFor(() => expect(fake.deployUrls).toHaveLength(1))
+      expect(screen.getAllByTestId('site-row')).toHaveLength(2)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('deploy-status')).not.toBeInTheDocument()
+    })
+
+    it('a status that changes between two automatic refreshes updates the row without a click', async () => {
+      deployAnswers = [deploys(deploy('a.com', 'IN_PROGRESS')), deploys(deploy('a.com', 'SUCCEEDED'))]
+      const fake = setup(list([site('a.com')]))
+      fakeClock()
+      renderPage()
+      expect(await screen.findByText('In progress')).toBeInTheDocument()
+      await advance(29_000)
+      expect(fake.deployUrls).toEqual([DEPLOYS_URL])
+      await advance(1_000)
+      expect(await screen.findByText('Succeeded')).toBeInTheDocument()
+      expect(screen.queryByText('In progress')).not.toBeInTheDocument()
+      expect(fake.deployUrls).toEqual([DEPLOYS_URL, DEPLOYS_URL])
+      expect(fake.urls).toHaveLength(1) // the site list itself is not asked for again
+    })
+
+    it('keeps the last known statuses when a later deploys call fails', async () => {
+      deployAnswers = [deploys(deploy('a.com', 'SUCCEEDED')), problem(429, 'HOSTINGER_RATE_LIMITED', 'Slow down')]
+      const fake = setup(list([site('a.com')]))
+      fakeClock()
+      renderPage()
+      await screen.findByText('Succeeded')
+      await advance(30_000)
+      await waitFor(() => expect(fake.deployUrls).toHaveLength(2))
+      await advance(0)
+      expect(screen.getByText('Succeeded')).toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('a site that could not be read this time keeps the status it had', async () => {
+      const limited = { source: 'HOSTINGER', code: 'HOSTINGER_RATE_LIMITED', message: 'Slow down', retryAfterSeconds: 42 }
+      deployAnswers = [
+        deploys(deploy('a.com', 'FAILED')),
+        deploys(deploy('a.com', 'UNKNOWN', { at: null, commit: null, problems: [limited] as SiteDeploy['problems'] }))
+      ]
+      const fake = setup(list([site('a.com')]))
+      fakeClock()
+      renderPage()
+      await screen.findByText('Failed')
+      await advance(30_000)
+      await waitFor(() => expect(fake.deployUrls).toHaveLength(2))
+      await advance(0)
+      expect(screen.getByText('Failed')).toBeInTheDocument()
+      expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+    })
+
+    it('does not refresh while the window is hidden, and refreshes at once when it is shown again', async () => {
+      deployAnswers = [deploys(deploy('a.com', 'IN_PROGRESS')), deploys(deploy('a.com', 'SUCCEEDED'))]
+      const fake = setup(list([site('a.com')]))
+      fakeClock()
+      renderPage()
+      await screen.findByText('In progress')
+      setVisibility('hidden')
+      await advance(120_000)
+      expect(fake.deployUrls).toHaveLength(1)
+      setVisibility('visible')
+      expect(await screen.findByText('Succeeded')).toBeInTheDocument()
+      expect(fake.deployUrls).toHaveLength(2)
+      await advance(30_000)
+      expect(fake.deployUrls).toHaveLength(3)
+    })
+
+    it('does not refresh after the window lost focus, and starts again when it gets focus back', async () => {
+      const fake = setup(list([site('a.com')]))
+      deployAnswers = [deploys(deploy('a.com', 'SUCCEEDED'))]
+      fakeClock()
+      renderPage()
+      await screen.findByText('Succeeded')
+      act(() => {
+        window.dispatchEvent(new Event('blur'))
+      })
+      await advance(10_000)
+      expect(fake.deployUrls).toHaveLength(1)
+      // Back before the data is 30 seconds old: no extra request, the normal rhythm continues.
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      await advance(0)
+      expect(fake.deployUrls).toHaveLength(1)
+      await advance(30_000)
+      expect(fake.deployUrls).toHaveLength(2)
+      act(() => {
+        window.dispatchEvent(new Event('blur'))
+      })
+      await advance(120_000)
+      expect(fake.deployUrls).toHaveLength(2)
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      await advance(0)
+      expect(fake.deployUrls).toHaveLength(3)
+    })
+
+    it('stops refreshing when the view is left', async () => {
+      deployAnswers = [deploys(deploy('a.com', 'SUCCEEDED'))]
+      const fake = setup(list([site('a.com')]))
+      fakeClock()
+      const { unmount } = renderPage()
+      await screen.findByText('Succeeded')
+      unmount()
+      await advance(120_000)
+      expect(fake.deployUrls).toHaveLength(1)
+    })
+
+    it('Refresh asks for the deploys again with refresh=true', async () => {
+      const user = userEvent.setup()
+      deployAnswers = [deploys(deploy('a.com', 'IN_PROGRESS')), deploys(deploy('a.com', 'FAILED'))]
+      const fake = setup(list([site('a.com')]))
+      renderPage()
+      await screen.findByText('In progress')
+      await user.click(screen.getByRole('button', { name: 'Refresh' }))
+      expect(await screen.findByText('Failed')).toBeInTheDocument()
+      expect(fake.deployUrls).toEqual([DEPLOYS_URL, `${BASE_URL}/api/sites/deploys?refresh=true`])
     })
   })
 })
