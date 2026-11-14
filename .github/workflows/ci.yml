@@ -1,4 +1,5 @@
 # Builds and tests everything on every pull request and on pushes to main.
+# The release workflow (release.yml) also calls it, so a release runs exactly the same tests.
 # Only fake external APIs are used (WireMock); no secrets or real tokens are needed.
 name: CI
 
@@ -6,6 +7,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read

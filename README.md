@@ -80,6 +80,14 @@ A few decisions worth knowing about (details in the [reference](docs/reference.m
 - **End to end:** 20 Playwright specs drive the **real** Electron app and the **real** Java backend against the fake APIs.
 - **No test can reach a real account:** every external address points at a closed port unless a test supplies a fake server.
 
+## Install
+
+1. Download `Dockline-Setup-<version>.exe` from the latest [release](https://github.com/DelucaGit/Dockline/releases).
+2. Run it. Java is bundled, so nothing else is needed.
+3. Dockline is not code-signed, so Windows may say **"Windows protected your PC"**. Click **More info**, then **Run anyway**.
+
+To upgrade, run the newer installer; settings and tokens are kept. There is no automatic update.
+
 ## Try it
 
 You need Windows, Java 25 and Node 24. Maven is not needed; the Maven Wrapper downloads it.
