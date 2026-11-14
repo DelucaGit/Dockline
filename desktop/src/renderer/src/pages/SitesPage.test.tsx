@@ -372,6 +372,56 @@ describe('SitesPage', () => {
       expect(screen.getAllByTestId('site-row')).toHaveLength(2)
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       expect(screen.queryByTestId('deploy-status')).not.toBeInTheDocument()
+      expect(await screen.findByTestId('deploy-trouble')).toHaveTextContent('Deploy status could not be updated. down')
+    })
+
+    it('a failed update says so once, keeps the last statuses and keeps refreshing', async () => {
+      deployAnswers = [
+        deploys(deploy('a.com', 'SUCCEEDED'), deploy('b.com', 'IN_PROGRESS')),
+        problem(502, 'HOSTINGER_UNAVAILABLE', 'Hostinger did not answer.'),
+        deploys(deploy('a.com', 'SUCCEEDED'), deploy('b.com', 'FAILED'))
+      ]
+      const fake = setup(list([site('a.com'), site('b.com')]))
+      fakeClock()
+      renderPage()
+      await screen.findByText('Succeeded')
+      await advance(30_000)
+      const notes = await screen.findAllByTestId('deploy-trouble')
+      expect(notes).toHaveLength(1)
+      expect(notes[0]).toHaveTextContent('Deploy status could not be updated. Hostinger did not answer.')
+      expect(notes[0]).toHaveAttribute('role', 'status')
+      expect(screen.getAllByTestId('site-row')).toHaveLength(2)
+      expect(screen.getByText('Succeeded')).toBeInTheDocument()
+      expect(screen.getByText('In progress')).toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      await advance(30_000)
+      expect(await screen.findByText('Failed')).toBeInTheDocument()
+      expect(fake.deployUrls).toHaveLength(3)
+      await waitFor(() => expect(screen.queryByTestId('deploy-trouble')).not.toBeInTheDocument())
+    })
+
+    it('while rate limited it counts down, keeps the list, waits, then asks again', async () => {
+      deployAnswers = [
+        deploys(deploy('a.com', 'IN_PROGRESS')),
+        problem(429, 'HOSTINGER_RATE_LIMITED', 'Slow down', { retryAfterSeconds: 60 }),
+        deploys(deploy('a.com', 'SUCCEEDED'))
+      ]
+      const fake = setup(list([site('a.com'), site('b.com')]))
+      fakeClock()
+      renderPage()
+      await screen.findByText('In progress')
+      await advance(30_000)
+      expect(await screen.findByTestId('deploy-trouble')).toHaveTextContent('Deploy status: rate limited, retrying in 60 s')
+      expect(screen.getAllByTestId('site-row')).toHaveLength(2)
+      expect(screen.getByText('In progress')).toBeInTheDocument()
+      await advance(45_000) // longer than the normal interval: still waiting
+      expect(screen.getByTestId('deploy-trouble')).toHaveTextContent('retrying in 15 s')
+      expect(fake.deployUrls).toHaveLength(2)
+      await advance(15_000)
+      expect(await screen.findByText('Succeeded')).toBeInTheDocument()
+      expect(fake.deployUrls).toHaveLength(3)
+      await waitFor(() => expect(screen.queryByTestId('deploy-trouble')).not.toBeInTheDocument())
+      expect(fake.urls).toHaveLength(1) // the site list itself was never asked for again
     })
 
     it('a status that changes between two automatic refreshes updates the row without a click', async () => {
@@ -417,6 +467,12 @@ describe('SitesPage', () => {
       await advance(0)
       expect(screen.getByText('Failed')).toBeInTheDocument()
       expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+      // The site's own rate limit is told once, with its wait; the next question comes after it, not before.
+      expect(screen.getByTestId('deploy-trouble')).toHaveTextContent('Deploy status: rate limited, retrying in 42 s')
+      await advance(41_000)
+      expect(fake.deployUrls).toHaveLength(2)
+      await advance(1_000)
+      await waitFor(() => expect(fake.deployUrls).toHaveLength(3))
     })
 
     it('does not refresh while the window is hidden, and refreshes at once when it is shown again', async () => {
